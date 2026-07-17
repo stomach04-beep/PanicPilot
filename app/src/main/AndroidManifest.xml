@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 市場データ取得（nikkei225jp / Yahoo Finance） -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 点灯・買い増し・出口の通知（Android 13+） -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- WorkManagerのバックグラウンド実行用 -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- 端末再起動後に日次チェックWorkを再登録する -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <application
+        android:name=".PanicPilotApp"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="暴落出動ナビ"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.PanicPilot">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="暴落出動ナビ">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- 再起動・アプリ更新時にPeriodicWorkを再登録するレシーバー -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+</manifest>

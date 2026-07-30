@@ -9,6 +9,11 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.example.panicpilot.data.NotifLog
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 /**
  * 通知まわり。チャンネルIDはバージョン付き
@@ -30,11 +35,23 @@ object NotificationHelper {
         nm.createNotificationChannel(ch)
     }
 
-    /** 通知を出す（POST_NOTIFICATIONS 未許可なら静かにスキップ） */
+    /**
+     * 通知を出す（POST_NOTIFICATIONS 未許可なら通知自体はスキップ）。
+     * どちらの場合も通知履歴（NotifLog）には必ず記録する。
+     * 権限が無くて出せなかったことも履歴に残るので、後から気づける。
+     */
     fun notify(context: Context, id: Int, title: String, text: String) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
-            != PackageManager.PERMISSION_GRANTED
-        ) return
+        val granted = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+
+        // ─── 通知履歴に記録（日本時間） ───
+        val jstNow = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.JAPAN)
+            .apply { timeZone = TimeZone.getTimeZone("Asia/Tokyo") }
+            .format(Date())
+        NotifLog.append(context, NotifLog.Entry(jstNow, title, text, granted))
+
+        if (!granted) return
         val intent = Intent(context, MainActivity::class.java)
         val pi = PendingIntent.getActivity(
             context, 0, intent,

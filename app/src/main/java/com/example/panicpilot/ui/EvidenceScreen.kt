@@ -8,13 +8,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import android.widget.Toast
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.panicpilot.NotificationHelper
 
 /**
  * 根拠タブ: J-Quants 10年データ（生存バイアス無し）バックテストの実績。
@@ -22,6 +26,7 @@ import androidx.compose.ui.unit.dp
  */
 @Composable
 fun EvidenceScreen() {
+    val context = LocalContext.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -90,8 +95,42 @@ fun EvidenceScreen() {
                 )
             }
         }
+
+        // ── 通知の動作確認 ──
+        // 点灯していない平常時は本物の通知が出ないため、「通知が届く状態か」を
+        // 確かめる手段が無かった（作った日から確認できないまま残っていた項目）。
+        // 本番と同じ NotificationHelper・同じチャンネルを通すので、
+        // ここで音が鳴れば本番の点灯通知も同じ経路で届く。
+        Card(shape = RoundedCornerShape(14.dp)) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("通知が届くか確かめる", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "点灯していない平常時は通知が出ないので、届く状態かどうかを" +
+                    "自分で確かめられません。下のボタンは本番と同じ通知経路でテスト通知を1件出します。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Button(
+                    onClick = {
+                        NotificationHelper.notify(
+                            context,
+                            TEST_NOTIFICATION_ID,
+                            "通知テスト（これは本物の点灯ではありません）",
+                            "この通知が見えていれば、実際に出動条件が点灯したときも同じように届きます。"
+                        )
+                        Toast.makeText(context, "テスト通知を出しました", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("テスト通知を出す")
+                }
+            }
+        }
     }
 }
+
+// 本番の通知IDとぶつからないよう、テスト専用の大きな番号を使う
+private const val TEST_NOTIFICATION_ID = 90001
 
 @Composable
 private fun EvidenceRow(label: String, lev: String, topix: String) {

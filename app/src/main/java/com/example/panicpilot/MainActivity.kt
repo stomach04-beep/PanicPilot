@@ -34,6 +34,7 @@ import com.example.panicpilot.data.MarketStatus
 import com.example.panicpilot.data.Position
 import com.example.panicpilot.data.Storage
 import com.example.panicpilot.ui.EvidenceScreen
+import com.example.panicpilot.ui.HistoryScreen
 import com.example.panicpilot.ui.PlanScreen
 import com.example.panicpilot.ui.SignalScreen
 import com.example.panicpilot.ui.TrendScreen
@@ -121,7 +122,8 @@ private fun AppRoot() {
     ) { pad ->
         Column(Modifier.padding(pad)) {
             TabRow(selectedTabIndex = tab) {
-                listOf("シグナル", "推移", "出動ナビ", "根拠").forEachIndexed { i, label ->
+                // 5タブ化に伴い「出動ナビ」→「出動」に短縮（幅の都合）
+                listOf("シグナル", "推移", "出動", "根拠", "履歴").forEachIndexed { i, label ->
                     Tab(selected = tab == i, onClick = { tab = i },
                         text = { Text(label) })
                 }
@@ -149,6 +151,7 @@ private fun AppRoot() {
                     onClose = { position = null; persist() }
                 )
                 3 -> EvidenceScreen()
+                4 -> HistoryScreen()
             }
         }
     }

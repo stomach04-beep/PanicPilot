@@ -3,7 +3,9 @@ package com.example.panicpilot
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.example.panicpilot.data.LitLevel
 import com.example.panicpilot.data.MarketFetcher
+import com.example.panicpilot.data.MarketStatus
 import com.example.panicpilot.data.Storage
 import java.time.LocalDate
 import java.time.ZoneId
@@ -12,6 +14,11 @@ import java.time.ZoneId
  * 1日1回（引け後）に市場データを取得して判定するWorker。
  * 通知は「同じデータ日付×同じ種類」で1回だけ（notifiedKeysで重複防止。
  * 初回取得で既に点灯している場合も通知する＝出動アプリなので望ましい動作）
+ *
+ * 点灯だけでなく「消灯」（前回より点灯レベルが下がった日）も通知する。
+ * 判定は保存した lastLevel（前回この Worker が見たレベル）との比較で行う。
+ * 保存済みの status を前回値に使うと、アプリを開いた時の再取得で上書きされ、
+ * 点灯→消灯の変化が消えて通知が出なくなるため。
  *
  * 取得失敗の無言死対策:
  * 「シグナル無し（平穏）」と「取得失敗」を区別できるように、
@@ -60,6 +67,44 @@ class DailyCheckWorker(
             }
         }
 
+        // ─── 消灯の判定（点灯していたものが消えた瞬間を知らせる） ───
+        // 比較するのは「前回この Worker が通知判定に使ったレベル」であって、
+        // 保存済みの status ではない（画面の更新ボタンで status は書き換わるため）
+        val prevLevel = LitLevel.fromName(saved.lastLevel)
+        val nowLevel = status.level
+        if (nowLevel.rank < prevLevel.rank) {
+            // 消えた条件（前回点灯していて今回は点いていないもの）
+            val turnedOff = saved.lastLitSignals
+                .filter { it !in status.litSignalKeys }
+                .joinToString("・") { MarketStatus.signalLabel(it) }
+            // いまの3指標（消灯後の水準を1通知で把握できるように併記）
+            val nowValues = "52週${fmtPct(status.dd52w)} / 5日${fmtPct(status.ret5d)} / " +
+                "騰落レシオ${"%.1f".format(status.adr25)}"
+            // 保有中なら「消灯＝売り」ではないことを明記する（出口は52週高値-3%回復のまま）
+            val holdNote = if (pos != null) {
+                "保有中の分は消灯では売らない。出口は52週高値-3%まで回復したときのまま（検証17）"
+            } else {
+                "次の点灯まで待機。追いかけて買わない"
+            }
+            when {
+                // 深い点灯 → 浅い点灯（騰落レシオ70〜80）。まだ注意レベルは続いている
+                prevLevel == LitLevel.DEEP && nowLevel == LitLevel.SHALLOW -> fireOnce(
+                    "off_deep", NOTIF_ID_LIGHTS_OFF, "🔵 出動シグナル消灯（浅い点灯は継続）",
+                    "消えた条件: ${turnedOff.ifEmpty { "出動条件" }}。現在 $nowValues。$holdNote"
+                )
+                // 深い点灯 → 平常
+                prevLevel == LitLevel.DEEP -> fireOnce(
+                    "off_deep", NOTIF_ID_LIGHTS_OFF, "🔵 出動シグナル消灯",
+                    "消えた条件: ${turnedOff.ifEmpty { "出動条件" }}。現在 $nowValues。$holdNote"
+                )
+                // 浅い点灯 → 平常
+                else -> fireOnce(
+                    "off_shallow", NOTIF_ID_LIGHTS_OFF, "✅ 浅い点灯も消灯（平常に戻りました）",
+                    "騰落レシオが80以上に回復。現在 $nowValues。$holdNote"
+                )
+            }
+        }
+
         if (status.deep) {
             val reasons = buildList {
                 if (status.sigDd) add("52週高値から${fmtPct(status.dd52w)}")
@@ -104,7 +149,11 @@ class DailyCheckWorker(
         val keep = if (notified.size <= 30) notified
                    else notified.filter { it.endsWith(status.dataDate) }.toMutableSet()
 
-        Storage.save(ctx, Storage.Saved(status, pos, keep))
+        // 今回のレベルを「前回値」として記録（次回の消灯判定の材料）
+        Storage.save(
+            ctx,
+            Storage.Saved(status, pos, keep, nowLevel.name, status.litSignalKeys)
+        )
         return Result.success()
     }
 
@@ -150,6 +199,7 @@ class DailyCheckWorker(
         private const val KEY_LAST_FAIL_DATE = "fetch_last_fail_date"  // 最後に失敗を数えた日
         private const val FAIL_NOTIFY_THRESHOLD = 2                // この日数連続で失敗したら通知
         private const val NOTIF_ID_FETCH_FAIL = 6                  // 通知ID（1〜5はシグナル系で使用済み）
+        private const val NOTIF_ID_LIGHTS_OFF = 7                  // 消灯通知の通知ID
 
         fun fmt(v: Double) = "%,.1f".format(v)
         fun fmtPct(v: Double) = "%+.1f%%".format(v * 100)

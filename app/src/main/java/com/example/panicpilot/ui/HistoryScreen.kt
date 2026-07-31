@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import com.example.panicpilot.DailyCheckWorker
 import com.example.panicpilot.TestNotifyWorker
 import com.example.panicpilot.data.NotifLog
 import java.util.concurrent.TimeUnit
@@ -88,6 +89,37 @@ fun HistoryScreen() {
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("15秒後にテスト通知を予約")
+                    }
+                }
+            }
+        }
+
+        // ─── 日次チェックを今すぐ走らせるカード ───
+        item {
+            Card(shape = RoundedCornerShape(14.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("日次チェックを今すぐ実行", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "毎日16:30に自動で走る判定（点灯・消灯・買い増し・出口）を手動で1回走らせます。" +
+                        "状態が変わっていれば通知が出て、この履歴にも残ります。" +
+                        "変化が無ければ通知は出ません（正常）。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Button(
+                        onClick = {
+                            // 本番と同じ DailyCheckWorker を1回だけ実行する
+                            val req = OneTimeWorkRequestBuilder<DailyCheckWorker>().build()
+                            WorkManager.getInstance(context).enqueue(req)
+                            Toast.makeText(
+                                context,
+                                "日次チェックを実行中…（数秒後に「↻ 更新」で履歴を確認）",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("いま判定する")
                     }
                 }
             }

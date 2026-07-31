@@ -19,7 +19,7 @@ object Storage {
     // ─── 読み込み ───
     fun load(context: Context): Saved {
         val f = file(context)
-        if (!f.exists()) return Saved(null, null, emptySet())
+        if (!f.exists()) return Saved(null, null, emptySet(), null, emptySet())
         return try {
             val root = JSONObject(f.readText(Charsets.UTF_8))
             val status = root.optJSONObject("status")?.let { s ->
@@ -61,9 +61,14 @@ object Storage {
             val notified = root.optJSONArray("notified")?.let { a ->
                 (0 until a.length()).map { a.getString(it) }.toSet()
             } ?: emptySet()
-            Saved(status, pos, notified)
+            // 前回の点灯レベル（消灯判定用）。旧保存ファイルには無いので null 可
+            val lastLevel = root.optString("lastLevel").takeIf { it.isNotEmpty() }
+            val lastSignals = root.optJSONArray("lastLitSignals")?.let { a ->
+                (0 until a.length()).map { a.getString(it) }.toSet()
+            } ?: emptySet()
+            Saved(status, pos, notified, lastLevel, lastSignals)
         } catch (e: Exception) {
-            Saved(null, null, emptySet())   // 壊れていたら初期状態から
+            Saved(null, null, emptySet(), null, emptySet())   // 壊れていたら初期状態から
         }
     }
 
@@ -99,6 +104,9 @@ object Storage {
             })
         }
         root.put("notified", JSONArray(saved.notifiedKeys.toList()))
+        // 前回の点灯レベル（消灯通知の判定に使う。DailyCheckWorker だけが更新する）
+        saved.lastLevel?.let { root.put("lastLevel", it) }
+        root.put("lastLitSignals", JSONArray(saved.lastLitSignals.toList()))
 
         val f = file(context)
         val tmp = File(f.parentFile, "$FILE_NAME.tmp")
@@ -113,6 +121,12 @@ object Storage {
     data class Saved(
         val status: MarketStatus?,
         val position: Position?,
-        val notifiedKeys: Set<String>    // 通知済みキー（"deep:2026-07-14" 等）重複通知防止
+        val notifiedKeys: Set<String>,   // 通知済みキー（"deep:2026-07-14" 等）重複通知防止
+        // ↓ 消灯通知のための「前回の点灯レベル」。画面の更新ボタンでは書き換えず、
+        //   DailyCheckWorker（通知を出す側）だけが更新する。
+        //   status を前回値として使うと、アプリを開いた瞬間の再取得で
+        //   点灯→消灯の変化が上書きされて通知が出なくなるため、別に持つ
+        val lastLevel: String? = null,          // LitLevel.name（DEEP/SHALLOW/CALM）
+        val lastLitSignals: Set<String> = emptySet()  // そのとき点灯していた条件キー
     )
 }

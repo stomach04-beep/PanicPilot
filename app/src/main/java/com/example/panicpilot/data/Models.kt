@@ -24,12 +24,53 @@ data class MarketStatus(
     val sigShallow: Boolean get() = adr25 < TH_ADR_SHALLOW  // 浅い点灯（30-40日待って二番底）
     val deep: Boolean get() = sigDd || sigFast || sigAdr
 
+    // ─── 総合の点灯レベル（消灯判定の単一の真実の源） ───
+    // 通知（点灯・消灯）はこのレベルの変化だけを見る。ここ以外で強弱を再定義しない
+    val level: LitLevel
+        get() = when {
+            deep -> LitLevel.DEEP
+            sigShallow -> LitLevel.SHALLOW
+            else -> LitLevel.CALM
+        }
+
+    /** いま点灯している条件のキー一覧（消灯時に「何が消えたか」を書くために使う） */
+    val litSignalKeys: Set<String>
+        get() = buildSet {
+            if (sigDd) add(SIG_DD)
+            if (sigFast) add(SIG_FAST)
+            if (sigAdr) add(SIG_ADR)
+        }
+
     // ─── 点灯しきい値（単一の真実の源。シグナル判定・推移グラフの両方がここを見る） ───
     companion object {
         const val TH_DD = -0.15          // 52週高値からの下落率 点灯ライン
         const val TH_FAST = -0.08        // 5営業日リターン 点灯ライン
         const val TH_ADR_DEEP = 70.0     // 25日騰落レシオ 深い点灯ライン
         const val TH_ADR_SHALLOW = 80.0  // 25日騰落レシオ 注意ライン
+
+        // 点灯条件のキー（保存ファイル・通知文の両方でこの文字列を使う）
+        const val SIG_DD = "dd"       // 52週高値からの下落率
+        const val SIG_FAST = "fast"   // 5営業日の急落
+        const val SIG_ADR = "adr"     // 25日騰落レシオ
+
+        /** 条件キー → 日本語の呼び名（通知文用） */
+        fun signalLabel(key: String): String = when (key) {
+            SIG_DD -> "52週高値からの下落"
+            SIG_FAST -> "5日間の急落"
+            SIG_ADR -> "騰落レシオ<70"
+            else -> key
+        }
+    }
+}
+
+/** 総合の点灯レベル。DEEP（出動）> SHALLOW（浅い点灯）> CALM（平常） */
+enum class LitLevel(val rank: Int) {
+    CALM(0), SHALLOW(1), DEEP(2);
+
+    companion object {
+        /** 保存文字列から復元（未知の値・null は平常扱い） */
+        fun fromName(name: String?): LitLevel =
+            entries.firstOrNull { it.name == name } ?: CALM
     }
 }
 

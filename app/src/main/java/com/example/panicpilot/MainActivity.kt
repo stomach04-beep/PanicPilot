@@ -82,8 +82,13 @@ private fun AppRoot() {
     var tab by remember { mutableIntStateOf(0) }
 
     fun persist() {
-        val notified = Storage.load(context).notifiedKeys
-        Storage.save(context, Storage.Saved(status, position, notified))
+        // 通知まわりの記録（通知済みキー・前回の点灯レベル）は画面側では触らず、
+        // 読み込んだ値をそのまま書き戻す（消灯通知の判定材料を消さないため）
+        val saved = Storage.load(context)
+        Storage.save(
+            context,
+            saved.copy(status = status, position = position)
+        )
     }
 
     fun refresh() {

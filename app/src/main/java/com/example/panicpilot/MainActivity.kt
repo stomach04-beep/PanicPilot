@@ -14,9 +14,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -29,10 +29,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import com.example.panicpilot.data.MarketFetcher
 import com.example.panicpilot.data.MarketStatus
 import com.example.panicpilot.data.Position
 import com.example.panicpilot.data.Storage
+import com.example.panicpilot.ui.CrashHistoryScreen
 import com.example.panicpilot.ui.EvidenceScreen
 import com.example.panicpilot.ui.HistoryScreen
 import com.example.panicpilot.ui.PlanScreen
@@ -126,12 +128,13 @@ private fun AppRoot() {
         }
     ) { pad ->
         Column(Modifier.padding(pad)) {
-            TabRow(selectedTabIndex = tab) {
-                // 5タブ化に伴い「出動ナビ」→「出動」に短縮（幅の都合）
-                listOf("シグナル", "推移", "出動", "根拠", "履歴").forEachIndexed { i, label ->
-                    Tab(selected = tab == i, onClick = { tab = i },
-                        text = { Text(label) })
-                }
+            // 6タブになり固定幅では入り切らないのでスクロール可能なタブ行にする
+            ScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
+                listOf("シグナル", "推移", "出動", "根拠", "過去局面", "履歴")
+                    .forEachIndexed { i, label ->
+                        Tab(selected = tab == i, onClick = { tab = i },
+                            text = { Text(label) })
+                    }
             }
             when (tab) {
                 0 -> SignalScreen(status, lastError)
@@ -156,7 +159,8 @@ private fun AppRoot() {
                     onClose = { position = null; persist() }
                 )
                 3 -> EvidenceScreen()
-                4 -> HistoryScreen()
+                4 -> CrashHistoryScreen(status)
+                5 -> HistoryScreen()
             }
         }
     }

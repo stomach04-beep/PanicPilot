@@ -19,10 +19,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.panicpilot.NotificationHelper
+import com.example.panicpilot.data.CRASH_HISTORY
 
 /**
  * 根拠タブ: J-Quants 10年データ（生存バイアス無し）バックテストの実績。
- * 数値は 2026-07-13 実施の検証15（bt_lev_etf.py）等の実測値
+ * 実績の数値は CrashHistoryData.kt（スクリプト自動生成）から導出し、ここには直書きしない
  */
 @Composable
 fun EvidenceScreen() {
@@ -43,22 +44,27 @@ fun EvidenceScreen() {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
+        // 実績の一覧は「過去局面」タブが本体。ここでは同じデータから要約だけ出す
+        // （旧版は8行を直書きしていて、条件を日経基準に直した後の実データとズレていた）
         Card(shape = RoundedCornerShape(14.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("過去8回の点灯で日経レバ1570を買った実績（12ヶ月保有）",
+                val r12 = CRASH_HISTORY.mapNotNull { it.r12m }
+                val wins = r12.count { it > 0 }
+                Text("点灯で日経レバ1570を買った実績（12ヶ月保有）",
                     fontWeight = FontWeight.SemiBold)
-                EvidenceRow("2018-10 DD型", "+21.6%", "+6.7%")
-                EvidenceRow("2018-12 騰落型", "+56.1%", "+21.2%")
-                EvidenceRow("2019-05 DD型", "-1.0%", "+0.9%")
-                EvidenceRow("2020-02 騰落型", "+84.1%", "+27.4%")
-                EvidenceRow("2020-03 DD型", "+108.3%", "+41.5%")
-                EvidenceRow("2022-03 DD型", "+18.9%", "+9.7%")
-                EvidenceRow("2024-08 DD型", "+42.8%", "+24.5%")
-                EvidenceRow("2025-04 DD型", "+200.7%", "+55.3%")
-                Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                    Text("平均（8回中7勝）", Modifier.weight(1f), fontWeight = FontWeight.Bold)
-                    Text("+66.4%", fontWeight = FontWeight.Bold)
-                }
+                SummaryLine("点灯した局面", "${CRASH_HISTORY.size}回（10年）")
+                SummaryLine("12ヶ月後の成績", "${wins}勝${r12.size - wins}敗")
+                SummaryLine("12ヶ月後の平均",
+                    String.format("%+.1f%%", r12.average()))
+                SummaryLine("いちばん悪かった局面",
+                    String.format("%+.1f%%", r12.minOrNull() ?: 0.0))
+                Text(
+                    "局面ごとの値動き・点灯と消灯の推移・いつ売ればよかったかは" +
+                    "「過去局面」タブで見られます。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
             }
         }
 
@@ -133,13 +139,12 @@ fun EvidenceScreen() {
 private const val TEST_NOTIFICATION_ID = 90001
 
 @Composable
-private fun EvidenceRow(label: String, lev: String, topix: String) {
+private fun SummaryLine(label: String, value: String) {
     Row(Modifier.fillMaxWidth()) {
-        Text(label, Modifier.weight(1.2f), style = MaterialTheme.typography.bodySmall)
-        Text("1570: $lev", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.Medium)
-        Text("TOPIX: $topix", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold)
     }
 }
 

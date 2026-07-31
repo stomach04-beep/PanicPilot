@@ -15,8 +15,8 @@ android {
         applicationId = "com.example.panicpilot"
         minSdk = 31
         targetSdk = 36
-        versionCode = 5
-        versionName = "1.4"   // 2026-07-31: 点灯後の「消灯」も通知するようにした
+        versionCode = 6
+        versionName = "1.5"   // 2026-07-31: 「過去局面」タブ（過去12局面のシミュレーション）を追加
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

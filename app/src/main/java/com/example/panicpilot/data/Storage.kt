@@ -66,7 +66,9 @@ object Storage {
             val lastSignals = root.optJSONArray("lastLitSignals")?.let { a ->
                 (0 until a.length()).map { a.getString(it) }.toSet()
             } ?: emptySet()
-            Saved(status, pos, notified, lastLevel, lastSignals)
+            // 撤退後ロック（旧保存ファイルには無いので null 可）
+            val retreatedAt = root.optString("retreatedAt").takeIf { it.isNotEmpty() }
+            Saved(status, pos, notified, lastLevel, lastSignals, retreatedAt)
         } catch (e: Exception) {
             Saved(null, null, emptySet(), null, emptySet())   // 壊れていたら初期状態から
         }
@@ -107,6 +109,7 @@ object Storage {
         // 前回の点灯レベル（消灯通知の判定に使う。DailyCheckWorker だけが更新する）
         saved.lastLevel?.let { root.put("lastLevel", it) }
         root.put("lastLitSignals", JSONArray(saved.lastLitSignals.toList()))
+        saved.retreatedAt?.let { root.put("retreatedAt", it) }
 
         val f = file(context)
         val tmp = File(f.parentFile, "$FILE_NAME.tmp")
@@ -127,6 +130,10 @@ object Storage {
         //   status を前回値として使うと、アプリを開いた瞬間の再取得で
         //   点灯→消灯の変化が上書きされて通知が出なくなるため、別に持つ
         val lastLevel: String? = null,          // LitLevel.name（DEEP/SHALLOW/CALM）
-        val lastLitSignals: Set<String> = emptySet()  // そのとき点灯していた条件キー
+        val lastLitSignals: Set<String> = emptySet(),  // そのとき点灯していた条件キー
+        // ↓ 撤退ライン（52週高値-35%）を割った日。null でなければ「撤退後ロック中」＝
+        //   52週高値-3%まで回復するまで新規出動しない（検証32・36）。
+        //   DailyCheckWorker が設定/解除する
+        val retreatedAt: String? = null
     )
 }

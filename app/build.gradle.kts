@@ -15,8 +15,8 @@ android {
         applicationId = "com.example.panicpilot"
         minSdk = 31
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.5"   // 2026-07-31: 「過去局面」タブ（過去12局面のシミュレーション）を追加
+        versionCode = 7
+        versionName = "1.6"   // 2026-08-01: 撤退ライン（52週高値-35%）と撤退後の出動ロックを追加
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

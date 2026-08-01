@@ -15,8 +15,8 @@ android {
         applicationId = "com.example.panicpilot"
         minSdk = 31
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.6"   // 2026-08-01: 撤退ライン（52週高値-35%）と撤退後の出動ロックを追加
+        versionCode = 8
+        versionName = "1.7"   // 2026-08-01: 日経VIによる確信度（出す金額の厚み）を追加
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

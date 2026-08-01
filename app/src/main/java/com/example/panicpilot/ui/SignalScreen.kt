@@ -100,12 +100,25 @@ fun SignalScreen(status: MarketStatus?, lastError: String?) {
             note = "70割れは10年全勝。80割れは急がず二番底待ちが正解"
         )
 
+        // 日経VIは点灯条件ではなく「確信度」の材料（検証33: 出動可否は変えず金額の厚みだけ）
+        SignalCard(
+            title = "日経VI（恐怖指数）※点灯条件ではありません",
+            value = if (status.nikkeiVi.isNaN()) "取得不可" else "%.1f".format(status.nikkeiVi),
+            threshold = "確信度 高: ${MarketStatus.TH_VI.toInt()}以上",
+            lit = false,
+            warn = status.viHigh,
+            note = "30以上が重なった点灯は買値が底に近く12M+70%（検証33）。" +
+                "出動の可否は変えず、出す金額を満額にするかの判断に使う"
+        )
+
         // ─── 参考情報 ───
         Card(shape = RoundedCornerShape(14.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 InfoRow("日経平均", "%,.0f円".format(status.indexLast))
                 InfoRow("52週高値", "%,.0f円".format(status.high52w))
-                InfoRow("出口ライン（高値-3%）", "%,.0f円".format(status.high52w * 0.97))
+                // しきい値は MarketStatus 側の計算を使う（0.97 を直書きしない）
+                InfoRow("出口ライン（高値-3%）", "%,.0f円".format(status.exitLine))
+                InfoRow("撤退ライン（高値-35%）", "%,.0f円".format(status.retreatLine))
                 status.lev1570?.let { InfoRow("日経レバ1570", "%,.0f円".format(it)) }
                 Spacer(Modifier.height(4.dp))
                 Text(

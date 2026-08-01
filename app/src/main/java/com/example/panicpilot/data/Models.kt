@@ -7,6 +7,7 @@ data class MarketStatus(
     val fetchedAt: String,       // 取得時刻 yyyy-MM-dd HH:mm
     val indexLast: Double,       // 日経平均 終値
     val adr25: Double,           // 25日騰落レシオ
+    val nikkeiVi: Double,        // 日経VI（恐怖指数）。欠損時はNaN
     val high52w: Double,         // 日経平均 52週高値（直近252営業日の最大）
     val dd52w: Double,           // 52週高値からの下落率（例 -0.18 = -18%）
     val ret5d: Double,           // 5営業日リターン（例 -0.09 = -9%）
@@ -30,6 +31,19 @@ data class MarketStatus(
     val retreatLine: Double get() = high52w * (1 + TH_RETREAT)  // 撤退する日経平均の水準
     val exitLine: Double get() = high52w * (1 + TH_EXIT)        // 利確する日経平均の水準
     val recovered: Boolean get() = dd52w >= TH_EXIT       // 52週高値-3%まで回復＝出口/ロック解除
+
+    // ─── 確信度（検証33）───
+    // 日経VI≥30 が重なった点灯は買値が底に近く（底より+18.6%高い→+9.9%）12M成績も
+    // +44.0%→+69.6%と良い。ただし2016-2026のn=8（12M計測はn=6）と標本が少ないので、
+    // 「出動するかどうか」は変えず、金額の厚みだけを変える材料に使う
+    val viHigh: Boolean get() = !nikkeiVi.isNaN() && nikkeiVi >= TH_VI
+    /** 出動予算に対する推奨投入率。確信度が高い局面だけ満額 */
+    val confidenceRatio: Double get() = if (viHigh) 1.0 else 0.5
+    val confidenceLabel: String get() = when {
+        nikkeiVi.isNaN() -> "確信度 不明（日経VI未取得）"
+        viHigh -> "確信度 高（日経VI ${"%.1f".format(nikkeiVi)} ≥ ${TH_VI.toInt()}）"
+        else -> "確信度 標準（日経VI ${"%.1f".format(nikkeiVi)} < ${TH_VI.toInt()}）"
+    }
 
     // ─── 総合の点灯レベル（消灯判定の単一の真実の源） ───
     // 通知（点灯・消灯）はこのレベルの変化だけを見る。ここ以外で強弱を再定義しない
@@ -58,6 +72,7 @@ data class MarketStatus(
         // 出口と撤退のライン（従来ここが直書きだったのを一元化）
         const val TH_EXIT = -0.03        // 52週高値-3%まで回復＝利確／撤退ロック解除
         const val TH_RETREAT = -0.35     // 52週高値-35%割れ＝撤退（損切り）
+        const val TH_VI = 30.0           // 日経VI 確信度ライン（検証23・33）
 
         // 点灯条件のキー（保存ファイル・通知文の両方でこの文字列を使う）
         const val SIG_DD = "dd"       // 52週高値からの下落率

@@ -59,20 +59,23 @@ object MarketFetcher {
         require(start >= 0 && end > start) { "DAILY配列が見つからない（形式変更の可能性）" }
         val inner = compact.substring(start + 2, end)
 
-        data class Row(val timeMs: Long, val nikkei: Double, val adr: Double)
+        data class Row(val timeMs: Long, val nikkei: Double, val adr: Double, val vi: Double)
         val rows = ArrayList<Row>(520)
         var pos = 0
         while (pos < inner.length) {
             val next = inner.indexOf("],[", pos)
             val rowStr = if (next >= 0) inner.substring(pos, next) else inner.substring(pos)
             val cols = rowStr.split(",")
-            // [0]時刻ms [1]日経平均 [7]25日騰落レシオ
+            // [0]時刻ms [1]日経平均 [7]25日騰落レシオ [11]日経VI
+            // ※[11]が日経VIであることは BargainChecker が公式ページ（indexes.nikkei.co.jp）と
+            //   複数日突合して確認済み（2026-07-13）。同じJSONなので追加の通信は要らない
             if (cols.size > 7) {
                 val t = cols[0].trim().toLongOrNull()
                 val nk = cols[1].trim().toDoubleOrNull()
                 val ad = cols[7].trim().toDoubleOrNull()
+                val vi = cols.getOrNull(11)?.trim()?.toDoubleOrNull()
                 if (t != null && nk != null && nk > 0) {
-                    rows.add(Row(t, nk, ad ?: Double.NaN))
+                    rows.add(Row(t, nk, ad ?: Double.NaN, vi ?: Double.NaN))
                 }
             }
             if (next < 0) break
@@ -91,6 +94,8 @@ object MarketFetcher {
         val ret5d = if (n > 5) last.nikkei / idxAll[n - 6] - 1.0 else 0.0
         // 騰落レシオは最後の有効値（当日欄が未確定のことがある）
         val adrLast = rows.lastOrNull { !it.adr.isNaN() && it.adr > 0 }?.adr ?: Double.NaN
+        // 日経VIも当日欄が未確定のことがあるので最後の有効値を使う（騰落レシオと同じ扱い）
+        val viLast = rows.lastOrNull { !it.vi.isNaN() && it.vi > 0 }?.vi ?: Double.NaN
 
         val jst = TimeZone.getTimeZone("Asia/Tokyo")
         val dayFmt = SimpleDateFormat("yyyy-MM-dd", Locale.JAPAN).apply { timeZone = jst }
@@ -120,6 +125,7 @@ object MarketFetcher {
             fetchedAt = minFmt.format(Date()),
             indexLast = last.nikkei,
             adr25 = adrLast,
+            nikkeiVi = viLast,
             high52w = high52w,
             dd52w = dd,
             ret5d = ret5d,

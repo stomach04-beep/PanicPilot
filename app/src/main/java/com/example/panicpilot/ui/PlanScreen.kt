@@ -86,7 +86,10 @@ private fun RetreatLockBanner(status: MarketStatus?, retreatedAt: String) {
 private fun PlanBuilder(status: MarketStatus?, onStart: (Long) -> Unit) {
     var budgetMan by rememberSaveable { mutableStateOf("100") }   // 万円
     val budgetYen = (budgetMan.toLongOrNull() ?: 0L) * 10000L
-    val tranche = budgetYen / 3
+    // 確信度（日経VI）で実際に出す金額を調整する。出動の可否は変えない（検証33・標本が小さいため）
+    val ratio = status?.confidenceRatio ?: 1.0
+    val deployYen = (budgetYen * ratio).toLong()
+    val tranche = deployYen / 3
 
     Text("出動計画をつくる", style = MaterialTheme.typography.titleLarge,
         fontWeight = FontWeight.Bold)
@@ -106,9 +109,41 @@ private fun PlanBuilder(status: MarketStatus?, onStart: (Long) -> Unit) {
         modifier = Modifier.fillMaxWidth()
     )
 
+    // ── 確信度カード（日経VIで出す金額を厚くするか決める材料） ──
+    status?.let { s ->
+        Card(shape = RoundedCornerShape(14.dp)) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(s.confidenceLabel, fontWeight = FontWeight.SemiBold)
+                Text(
+                    if (s.viHigh)
+                        "恐怖が極まっている局面。過去はこの条件が重なると買値が底に近く" +
+                        "（底より+9.9%）、12ヶ月成績も+44%→+70%だった。予算の満額を出す"
+                    else
+                        "まだ恐怖が浅い局面。予算の半分に抑える。" +
+                        "日経VIが${MarketStatus.TH_VI.toInt()}を超えたら満額に切り替わる",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "※出動するかどうかは変えません（VIの検証は2016年以降のn=8と標本が小さいため、" +
+                    "金額の厚みだけに使う・検証33）",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+
     Card(shape = RoundedCornerShape(14.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("3分割エントリー計画（検証19: 価格分割）", fontWeight = FontWeight.SemiBold)
+            if (ratio < 1.0) {
+                Text(
+                    "確信度が標準のため、予算${yen(budgetYen)}のうち${yen(deployYen)}を出します",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
             val t = status?.indexLast
             StepRow("① いま（点灯の翌々日）", yen(tranche),
                 t?.let { "日経 %,.0f円".format(it) } ?: "")
@@ -138,8 +173,9 @@ private fun PlanBuilder(status: MarketStatus?, onStart: (Long) -> Unit) {
     }
 
     Button(
-        onClick = { if (budgetYen > 0) onStart(budgetYen) },
-        enabled = budgetYen > 0 && status != null,
+        // 記録するのは「実際に出す額」（確信度で絞った後の額）。予算そのものではない
+        onClick = { if (deployYen > 0) onStart(deployYen) },
+        enabled = deployYen > 0 && status != null,
         modifier = Modifier.fillMaxWidth()
     ) { Text("① を実行した — 出動を記録する") }
 

@@ -28,6 +28,7 @@ object Storage {
                     fetchedAt = s.getString("fetchedAt"),
                     indexLast = s.getDouble("indexLast"),
                     adr25 = s.optDouble("adr25", Double.NaN),
+                    nikkeiVi = s.optDouble("nikkeiVi", Double.NaN),  // 旧保存ファイルには無い
                     high52w = s.getDouble("high52w"),
                     dd52w = s.getDouble("dd52w"),
                     ret5d = s.getDouble("ret5d"),
@@ -82,6 +83,7 @@ object Storage {
                 put("dataDate", s.dataDate); put("fetchedAt", s.fetchedAt)
                 put("indexLast", s.indexLast)
                 put("adr25", s.adr25); put("high52w", s.high52w)
+                if (!s.nikkeiVi.isNaN()) put("nikkeiVi", s.nikkeiVi)
                 put("dd52w", s.dd52w); put("ret5d", s.ret5d)
                 s.lev1570?.let { put("lev1570", it) }
                 put("indexRecent", JSONArray(s.indexRecent))

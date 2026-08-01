@@ -24,6 +24,13 @@ data class MarketStatus(
     val sigShallow: Boolean get() = adr25 < TH_ADR_SHALLOW  // 浅い点灯（30-40日待って二番底）
     val deep: Boolean get() = sigDd || sigFast || sigAdr
 
+    // ─── 撤退判定（検証32〜36で追加。損切りが無いのが唯一の致命的な弱点だった） ───
+    // 指数ベースで見るのがポイント。レバの含み損で切ると通常の暴落で狩られる（検証33）
+    val sigRetreat: Boolean get() = dd52w <= TH_RETREAT   // 52週高値-35%割れ＝構造的弱気相場
+    val retreatLine: Double get() = high52w * (1 + TH_RETREAT)  // 撤退する日経平均の水準
+    val exitLine: Double get() = high52w * (1 + TH_EXIT)        // 利確する日経平均の水準
+    val recovered: Boolean get() = dd52w >= TH_EXIT       // 52週高値-3%まで回復＝出口/ロック解除
+
     // ─── 総合の点灯レベル（消灯判定の単一の真実の源） ───
     // 通知（点灯・消灯）はこのレベルの変化だけを見る。ここ以外で強弱を再定義しない
     val level: LitLevel
@@ -47,6 +54,10 @@ data class MarketStatus(
         const val TH_FAST = -0.08        // 5営業日リターン 点灯ライン
         const val TH_ADR_DEEP = 70.0     // 25日騰落レシオ 深い点灯ライン
         const val TH_ADR_SHALLOW = 80.0  // 25日騰落レシオ 注意ライン
+
+        // 出口と撤退のライン（従来ここが直書きだったのを一元化）
+        const val TH_EXIT = -0.03        // 52週高値-3%まで回復＝利確／撤退ロック解除
+        const val TH_RETREAT = -0.35     // 52週高値-35%割れ＝撤退（損切り）
 
         // 点灯条件のキー（保存ファイル・通知文の両方でこの文字列を使う）
         const val SIG_DD = "dd"       // 52週高値からの下落率

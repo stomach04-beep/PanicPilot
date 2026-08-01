@@ -82,6 +82,8 @@ private fun AppRoot() {
     var lastError by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     var tab by remember { mutableIntStateOf(0) }
+    // 撤退ライン割れの日（null なら通常運用）。設定・解除するのは DailyCheckWorker だけ
+    var retreatedAt by remember { mutableStateOf<String?>(null) }
 
     fun persist() {
         // 通知まわりの記録（通知済みキー・前回の点灯レベル）は画面側では触らず、
@@ -114,6 +116,7 @@ private fun AppRoot() {
         val saved = withContext(Dispatchers.IO) { Storage.load(context) }
         status = saved.status
         position = saved.position
+        retreatedAt = saved.retreatedAt
         refresh()
     }
 
@@ -142,6 +145,7 @@ private fun AppRoot() {
                 2 -> PlanScreen(
                     status = status,
                     position = position,
+                    retreatedAt = retreatedAt,
                     onStart = { budget ->
                         val s = status ?: return@PlanScreen
                         val jst = TimeZone.getTimeZone("Asia/Tokyo")

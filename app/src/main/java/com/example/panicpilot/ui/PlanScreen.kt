@@ -38,6 +38,7 @@ import kotlin.math.floor
 fun PlanScreen(
     status: MarketStatus?,
     position: Position?,
+    retreatedAt: String?,          // 撤退ライン割れの日。null でなければ出動ロック中
     onStart: (budgetYen: Long) -> Unit,
     onFill2: () -> Unit,
     onFill3: () -> Unit,
@@ -50,10 +51,32 @@ fun PlanScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        if (retreatedAt != null) RetreatLockBanner(status, retreatedAt)
         if (position == null) {
             PlanBuilder(status, onStart)
         } else {
             PositionTracker(status, position, onFill2, onFill3, onClose)
+        }
+    }
+}
+
+/** 撤退ライン割れ後のロック表示（検証32・36: 弱気相場で買い増すと負けを重ねる） */
+@Composable
+private fun RetreatLockBanner(status: MarketStatus?, retreatedAt: String) {
+    Card(
+        shape = RoundedCornerShape(14.dp),
+        colors = androidx.compose.material3.CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("⛔ 撤退ロック中（新規出動しません）", fontWeight = FontWeight.Bold)
+            Text(
+                "${retreatedAt}に日経平均が撤退ライン（52週高値-35%）を割りました。" +
+                (status?.let { "52週高値-3%＝${"%,.0f".format(it.exitLine)}円まで回復すれば解除されます。" } ?: "") +
+                "点灯しても出動しないのがルールです（検証36: 弱気相場での追加出動は" +
+                "1991年-29.9%・2007年-61.2%と、いずれも負けを重ねただけ）",
+                style = MaterialTheme.typography.bodySmall
+            )
         }
     }
 }
@@ -95,7 +118,11 @@ private fun PlanBuilder(status: MarketStatus?, onStart: (Long) -> Unit) {
                 t?.let { "日経 %,.0f円 以下".format(it * 0.90) } ?: "")
             Text(
                 "※②③が60営業日以内に来なければ、その時点で残りを投入\n" +
-                "※出口: 日経平均が52週高値-3%以内に回復したら全売却（検証17: 8回全勝）",
+                "※出口: 日経平均が52週高値-3%以内に回復したら全売却（検証17: 8回全勝）\n" +
+                // 撤退ラインの基準は「現在値」ではなく「52週高値」。MarketStatus 側の計算を使う
+                "※撤退: 日経平均が52週高値-35%" +
+                (status?.let { "（%,.0f円）".format(it.retreatLine) } ?: "") +
+                "を割ったら損切りし、-3%回復まで新規出動しない（検証32・36）",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -142,9 +169,18 @@ private fun PositionTracker(
             status?.let {
                 InfoLine("現在 日経平均", "%,.0f円（基準比 %+.1f%%）"
                     .format(it.indexLast, (it.indexLast / pos.baseIndex - 1) * 100))
-                InfoLine("出口ライン", "%,.0f円（52週高値-3%%）".format(it.high52w * 0.97))
-                if (it.dd52w >= -0.03) {
+                // しきい値は MarketStatus 側の定義を参照する（0.97 等を直書きしない）
+                InfoLine("出口ライン（利確）", "%,.0f円（52週高値%.0f%%）"
+                    .format(it.exitLine, MarketStatus.TH_EXIT * 100))
+                InfoLine("撤退ライン（損切り）", "%,.0f円（52週高値%.0f%%）"
+                    .format(it.retreatLine, MarketStatus.TH_RETREAT * 100))
+                if (it.recovered) {
                     Text("🏁 出口シグナル点灯中！ 全売却のタイミングです",
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold)
+                }
+                if (it.sigRetreat) {
+                    Text("🛑 撤退シグナル点灯中！ 全売却して次の回復まで待機",
                         color = MaterialTheme.colorScheme.error,
                         fontWeight = FontWeight.Bold)
                 }

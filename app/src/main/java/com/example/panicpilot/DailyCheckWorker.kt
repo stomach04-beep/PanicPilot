@@ -105,16 +105,50 @@ class DailyCheckWorker(
             }
         }
 
+        // ─── 撤退ライン（52週高値-35%割れ）とロックの管理 ───
+        // 検証32〜36: 出口ルールだけだと弱気相場で3年握らされて-70%になる。
+        // 指数が-35%を割ったら全売却し、-3%まで回復するまで新規出動しない。
+        // 過去10年では一度も発動せず、発動したのは1990/2000/2007の3回だけ
+        var retreatedAt = saved.retreatedAt
+        if (status.sigRetreat) {
+            if (retreatedAt == null) {
+                retreatedAt = status.dataDate
+                fireOnce(
+                    "retreat", NOTIF_ID_RETREAT, "🛑 撤退シグナル（52週高値-35%割れ）",
+                    "日経平均 ${fmt(status.indexLast)}円が撤退ライン" +
+                        "${fmt(status.retreatLine)}円を割りました。" +
+                        (if (pos != null) "保有分は全売却。" else "") +
+                        "52週高値-3%（${fmt(status.exitLine)}円）まで回復するまで新規出動しません"
+                )
+            }
+        } else if (retreatedAt != null && status.recovered) {
+            retreatedAt = null       // 52週高値-3%まで回復＝ロック解除
+            fireOnce(
+                "unlock", NOTIF_ID_RETREAT, "🔓 撤退ロック解除",
+                "日経平均が52週高値-3%まで回復しました。次の点灯から通常どおり出動できます"
+            )
+        }
+        val lockedOut = retreatedAt != null
+
         if (status.deep) {
             val reasons = buildList {
                 if (status.sigDd) add("52週高値から${fmtPct(status.dd52w)}")
                 if (status.sigFast) add("5日で${fmtPct(status.ret5d)}の急落")
                 if (status.sigAdr) add("騰落レシオ${"%.1f".format(status.adr25)}")
             }.joinToString(" / ")
-            fireOnce(
-                "deep", 1, "🚨 出動シグナル点灯",
-                "$reasons。翌々日に予算の1/3で1回目のエントリー（詳細はアプリで）"
-            )
+            if (lockedOut) {
+                // 点灯しても出動しない。弱気相場の途中で買い増すと負けを重ねる（検証36）
+                fireOnce(
+                    "deep_locked", 1, "⛔ 点灯したが出動しません（撤退ロック中）",
+                    "$reasons。${retreatedAt}に撤退ライン割れ。" +
+                        "52週高値-3%（${fmt(status.exitLine)}円）まで回復するまで待機"
+                )
+            } else {
+                fireOnce(
+                    "deep", 1, "🚨 出動シグナル点灯",
+                    "$reasons。翌々日に予算の1/3で1回目のエントリー（詳細はアプリで）"
+                )
+            }
         } else if (status.sigShallow) {
             fireOnce(
                 "shallow", 2, "⚠ 浅い点灯（騰落レシオ<80）",
@@ -137,7 +171,7 @@ class DailyCheckWorker(
                 )
             }
             // 出口: 52週高値-3%以内まで回復（検証17: 8回全勝の出口ルール）
-            if (status.dd52w >= -0.03) {
+            if (status.recovered) {
                 fireOnce(
                     "exit", 5, "🏁 出口シグナル（高値圏まで回復）",
                     "日経平均が52週高値-3%以内に回復。全売却のタイミング（検証17: 8回全勝）"
@@ -149,10 +183,10 @@ class DailyCheckWorker(
         val keep = if (notified.size <= 30) notified
                    else notified.filter { it.endsWith(status.dataDate) }.toMutableSet()
 
-        // 今回のレベルを「前回値」として記録（次回の消灯判定の材料）
+        // 今回のレベルを「前回値」として記録（次回の消灯判定の材料）＋撤退ロックの状態
         Storage.save(
             ctx,
-            Storage.Saved(status, pos, keep, nowLevel.name, status.litSignalKeys)
+            Storage.Saved(status, pos, keep, nowLevel.name, status.litSignalKeys, retreatedAt)
         )
         return Result.success()
     }
@@ -200,6 +234,7 @@ class DailyCheckWorker(
         private const val FAIL_NOTIFY_THRESHOLD = 2                // この日数連続で失敗したら通知
         private const val NOTIF_ID_FETCH_FAIL = 6                  // 通知ID（1〜5はシグナル系で使用済み）
         private const val NOTIF_ID_LIGHTS_OFF = 7                  // 消灯通知の通知ID
+        private const val NOTIF_ID_RETREAT = 8                     // 撤退シグナル／ロック解除
 
         fun fmt(v: Double) = "%,.1f".format(v)
         fun fmtPct(v: Double) = "%+.1f%%".format(v * 100)

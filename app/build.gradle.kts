@@ -15,8 +15,8 @@ android {
         applicationId = "com.example.panicpilot"
         minSdk = 31
         targetSdk = 36
-        versionCode = 8
-        versionName = "1.7"   // 2026-08-01: 日経VIによる確信度（出す金額の厚み）を追加
+        versionCode = 9
+        versionName = "1.8"   // 2026-08-02: 買い対象を1570→1458へ変更（同指数・低コスト、検証39補足）
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

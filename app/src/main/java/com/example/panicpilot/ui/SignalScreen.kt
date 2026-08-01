@@ -119,7 +119,7 @@ fun SignalScreen(status: MarketStatus?, lastError: String?) {
                 // しきい値は MarketStatus 側の計算を使う（0.97 を直書きしない）
                 InfoRow("出口ライン（高値-3%）", "%,.0f円".format(status.exitLine))
                 InfoRow("撤退ライン（高値-35%）", "%,.0f円".format(status.retreatLine))
-                status.lev1570?.let { InfoRow("日経レバ1570", "%,.0f円".format(it)) }
+                status.lev1458?.let { InfoRow("楽天日経レバ1458", "%,.0f円".format(it)) }
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "データ日付: ${status.dataDate} ／ 取得: ${status.fetchedAt}",

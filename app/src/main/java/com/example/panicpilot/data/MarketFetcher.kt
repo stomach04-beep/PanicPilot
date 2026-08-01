@@ -14,7 +14,7 @@ import org.json.JSONObject
  *   1リクエストで 日経平均[1]・25日騰落レシオ[7] が取れる
  *   （BargainChecker で実績のあるソース。**Refererヘッダ必須**＝無いと404。
  *    実データ検証済み: TOPIX列は存在しないため基準指数は日経平均を使う）
- * - サブ: Yahoo Finance chart API で日経レバ1570の終値（失敗しても続行）
+ * - サブ: Yahoo Finance chart API で楽天日経レバ1458の終値（失敗しても続行）
  */
 object MarketFetcher {
 
@@ -23,8 +23,8 @@ object MarketFetcher {
     private const val REFERER = "https://nikkei225jp.com/data/karauri.php"
     private const val UA =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
-    private const val YAHOO_1570_URL =
-        "https://query1.finance.yahoo.com/v8/finance/chart/1570.T?range=5d&interval=1d"
+    private const val YAHOO_1458_URL =
+        "https://query1.finance.yahoo.com/v8/finance/chart/1458.T?range=5d&interval=1d"
 
     /** HTTP GET（タイムアウト・Referer付き） */
     private fun httpGet(url: String, referer: String? = null): String {
@@ -129,15 +129,15 @@ object MarketFetcher {
             high52w = high52w,
             dd52w = dd,
             ret5d = ret5d,
-            lev1570 = fetch1570(),
+            lev1458 = fetch1458(),
             indexRecent = idxAll.subList(maxOf(0, n - 60), n),
             history = history
         )
     }
 
-    /** 日経レバ1570の直近終値（口数計算の目安用。失敗したら null で続行） */
-    private fun fetch1570(): Double? = try {
-        val json = JSONObject(httpGet(YAHOO_1570_URL))
+    /** 楽天日経レバ1458の直近終値（口数計算の目安用。失敗したら null で続行） */
+    private fun fetch1458(): Double? = try {
+        val json = JSONObject(httpGet(YAHOO_1458_URL))
         val meta = json.getJSONObject("chart")
             .getJSONArray("result").getJSONObject(0)
             .getJSONObject("meta")

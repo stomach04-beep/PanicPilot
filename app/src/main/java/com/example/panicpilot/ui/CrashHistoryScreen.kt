@@ -72,7 +72,7 @@ private fun median(xs: List<Double>): Double? {
 }
 
 /**
- * 過去局面タブ: アプリと同じ3条件で10年分を再現し、「点灯したときに1570を買っていたら
+ * 過去局面タブ: アプリと同じ3条件で10年分を再現し、「点灯したときに1458を買っていたら
  * どうなったか」を局面ごとに見る画面。
  *
  * 数値は data/CrashHistoryData.kt（スクリプト自動生成）を唯一の出どころにする。
@@ -121,8 +121,8 @@ private fun SummaryPage(episodes: List<CrashEpisode>) {
             style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Text(
             "アプリと同じ3条件（52週高値-15% / 5日-8% / 騰落レシオ<70）を日経平均で10年分" +
-            "再現し、点灯の翌営業日に1570を買った場合の実績です。1570の実際の値段で計算して" +
-            "いるので、レバETFの減価と信託報酬は織り込み済みです。",
+            "再現し、点灯の翌営業日に楽天日経レバ1458を買った場合の実績です。1458の実際の値段で" +
+            "計算しているので、レバETFの減価と信託報酬は織り込み済みです。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -273,7 +273,7 @@ private fun EpisodePage(e: CrashEpisode, status: MarketStatus?) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.width(3.dp).height(10.dp).background(COL_BOTTOM))
                         Spacer(Modifier.width(3.dp))
-                        Text("1570の底", fontSize = 10.sp, color = Color.Gray)
+                        Text("1458の底", fontSize = 10.sp, color = Color.Gray)
                     }
                 }
                 val dim = if (e.dimDate.isBlank()) "まだ消えていません" else "${e.dimDate}に消灯"
@@ -290,7 +290,7 @@ private fun EpisodePage(e: CrashEpisode, status: MarketStatus?) {
         // ── 買っていたらどうなったか ──
         Card(shape = RoundedCornerShape(14.dp)) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("点灯の翌営業日に1570を買っていたら", fontWeight = FontWeight.SemiBold)
+                Text("点灯の翌営業日に1458を買っていたら", fontWeight = FontWeight.SemiBold)
                 RetRow("5営業日後に売る", e.r5)
                 RetRow("1ヶ月後に売る", e.r1m)
                 RetRow("3ヶ月後に売る", e.r3m)
@@ -349,7 +349,7 @@ private fun EpisodePage(e: CrashEpisode, status: MarketStatus?) {
     }
 }
 
-/** 点灯（赤）と消灯（グレー）の帯。1570の底に緑の縦線を立てる */
+/** 点灯（赤）と消灯（グレー）の帯。1458の底に緑の縦線を立てる */
 @Composable
 private fun LitTimelineBar(e: CrashEpisode) {
     val total = e.timeline.sumOf { it.days }.toFloat().coerceAtLeast(1f)

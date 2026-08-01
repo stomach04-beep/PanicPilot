@@ -50,7 +50,7 @@ fun EvidenceScreen() {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 val r12 = CRASH_HISTORY.mapNotNull { it.r12m }
                 val wins = r12.count { it > 0 }
-                Text("点灯で日経レバ1570を買った実績（12ヶ月保有）",
+                Text("点灯で楽天日経レバ1458を買った実績（12ヶ月保有）",
                     fontWeight = FontWeight.SemiBold)
                 SummaryLine("点灯した局面", "${CRASH_HISTORY.size}回（10年）")
                 SummaryLine("12ヶ月後の成績", "${wins}勝${r12.size - wins}敗")
@@ -71,8 +71,9 @@ fun EvidenceScreen() {
         Card(shape = RoundedCornerShape(14.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("検証済みルール", fontWeight = FontWeight.SemiBold)
-                Rule("買う対象は高ベータ（1570等）",
-                    "パニック12回で高β銘柄は12M対TOPIX+10.7%勝率75%。低β株は-8.4%勝率8%（検証8・12）")
+                Rule("買う対象は高ベータ（日経レバ系）。同指数なら1458が1570より有利",
+                    "パニック12回で高β銘柄は12M対TOPIX+10.7%勝率75%。低β株は-8.4%勝率8%（検証8・12）。" +
+                    "1458は1570と同じ日経レバレッジ指数で信託報酬0.385%vs0.88%、全10局面で1458が勝ち（検証39補足）")
                 Rule("3分割の価格分割エントリー",
                     "一括+23.4% vs 分割+22.0%で期待値同等。深掘れ時（コロナ）は分割が大幅に有利（検証19）")
                 Rule("出口は52週高値-3%回復",

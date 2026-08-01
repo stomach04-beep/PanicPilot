@@ -144,9 +144,15 @@ class DailyCheckWorker(
                         "52週高値-3%（${fmt(status.exitLine)}円）まで回復するまで待機"
                 )
             } else {
+                // 確信度（日経VI）で「満額か半分か」まで通知本文に入れる（検証33）
+                val conf = if (status.viHigh) {
+                    "日経VI${"%.1f".format(status.nikkeiVi)}＝確信度高。予算の満額で"
+                } else {
+                    "確信度は標準。予算の半分に抑えて"
+                }
                 fireOnce(
                     "deep", 1, "🚨 出動シグナル点灯",
-                    "$reasons。翌々日に予算の1/3で1回目のエントリー（詳細はアプリで）"
+                    "$reasons。$conf、翌々日に1/3を1回目のエントリー（詳細はアプリで）"
                 )
             }
         } else if (status.sigShallow) {

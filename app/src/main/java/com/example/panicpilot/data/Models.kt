@@ -1,7 +1,7 @@
 package com.example.panicpilot.data
 
 // ─── 市場データのスナップショット（daily2year.json から計算した結果） ───
-// 基準指数は日経平均（daily2year.json にTOPIX列は無い・1570も日経連動なので一貫）
+// 基準指数は日経平均（daily2year.json にTOPIX列は無い・1458も日経連動なので一貫）
 data class MarketStatus(
     val dataDate: String,        // データの最終日 yyyy-MM-dd
     val fetchedAt: String,       // 取得時刻 yyyy-MM-dd HH:mm
@@ -11,7 +11,9 @@ data class MarketStatus(
     val high52w: Double,         // 日経平均 52週高値（直近252営業日の最大）
     val dd52w: Double,           // 52週高値からの下落率（例 -0.18 = -18%）
     val ret5d: Double,           // 5営業日リターン（例 -0.09 = -9%）
-    val lev1570: Double?,        // 日経レバ1570の終値（取得失敗時 null）
+    // v1.8で1570→1458へ変更（同じ日経レバレッジ指数連動で信託報酬0.385% vs 0.88%。
+    // 検証39補足: 全10局面で1458が勝ち・10年CAGR+0.79pt/年）
+    val lev1458: Double?,        // 楽天日経レバ1458の終値（取得失敗時 null）
     // スパークライン用に直近60営業日の日経平均を保持
     val indexRecent: List<Double> = emptyList(),
     // 推移タブ用に直近約1年（252営業日）の3指標の日次系列を保持

@@ -94,7 +94,8 @@ private fun PlanBuilder(status: MarketStatus?, onStart: (Long) -> Unit) {
     Text("出動計画をつくる", style = MaterialTheme.typography.titleLarge,
         fontWeight = FontWeight.Bold)
     Text(
-        "対象は日経レバ1570（または高ベータ大型株）。新規資金・待機現金で行い、" +
+        "対象は楽天日経レバ1458（1570と同指数で信託報酬が半分以下・検証39補足）。" +
+        "新規資金・待機現金で行い、" +
         "保有中のコア資産は売らないこと（検証21: タイミング運用単体はB&Hに負ける）",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -161,10 +162,10 @@ private fun PlanBuilder(status: MarketStatus?, onStart: (Long) -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            status?.lev1570?.let { p ->
+            status?.lev1458?.let { p ->
                 if (tranche > 0) {
                     Text(
-                        "1570換算: 1回あたり約${floor(tranche / p).toInt()}口（@%,.0f円）".format(p),
+                        "1458換算: 1回あたり約${floor(tranche / p).toInt()}口（@%,.0f円）".format(p),
                         style = MaterialTheme.typography.bodySmall
                     )
                 }

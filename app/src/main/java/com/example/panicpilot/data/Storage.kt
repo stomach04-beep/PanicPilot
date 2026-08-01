@@ -32,7 +32,8 @@ object Storage {
                     high52w = s.getDouble("high52w"),
                     dd52w = s.getDouble("dd52w"),
                     ret5d = s.getDouble("ret5d"),
-                    lev1570 = s.optDouble("lev1570").takeIf { !it.isNaN() },
+                    // 旧キー"lev1570"は読まない（v1.8で1458へ変更。古い値は次回取得で埋まる）
+                    lev1458 = s.optDouble("lev1458").takeIf { !it.isNaN() },
                     indexRecent = s.optJSONArray("indexRecent")?.let { a ->
                         (0 until a.length()).map { a.getDouble(it) }
                     } ?: emptyList(),
@@ -85,7 +86,7 @@ object Storage {
                 put("adr25", s.adr25); put("high52w", s.high52w)
                 if (!s.nikkeiVi.isNaN()) put("nikkeiVi", s.nikkeiVi)
                 put("dd52w", s.dd52w); put("ret5d", s.ret5d)
-                s.lev1570?.let { put("lev1570", it) }
+                s.lev1458?.let { put("lev1458", it) }
                 put("indexRecent", JSONArray(s.indexRecent))
                 // 推移データ（3指標×直近252営業日）
                 put("history", JSONArray().apply {

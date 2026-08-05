@@ -5,8 +5,10 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.panicpilot.data.LitLevel
 import com.example.panicpilot.data.MarketFetcher
+import com.example.panicpilot.data.MarketFetcherUs
 import com.example.panicpilot.data.MarketStatus
 import com.example.panicpilot.data.Storage
+import com.example.panicpilot.data.UsMarketStatus
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -32,6 +34,13 @@ class DailyCheckWorker(
 
     override suspend fun doWork(): Result {
         val ctx = applicationContext
+
+        // ─── 米国市場のチェック（v1.9） ───
+        // 日本側より先に、独立に 取得→通知→保存 まで完結させる。
+        // 米国が失敗しても日本側は続行し、日本が失敗（下のretry/failure）しても
+        // 米国の通知と保存は済んでいる＝どちらかのデータ源障害がもう片方を殺さない
+        checkUsMarket(ctx)
+
         val status = try {
             MarketFetcher.fetch()
         } catch (e: Exception) {
@@ -186,15 +195,158 @@ class DailyCheckWorker(
         }
 
         // 通知キーの肥大防止: 30件を超えたら当日データ分だけ残す
+        // （米国キーは日付が違うので、米国側の当日データ分も一緒に残す）
+        val usDate = saved.usStatus?.dataDate
         val keep = if (notified.size <= 30) notified
-                   else notified.filter { it.endsWith(status.dataDate) }.toMutableSet()
+                   else notified.filter {
+                       it.endsWith(status.dataDate) || (usDate != null && it.endsWith(usDate))
+                   }.toMutableSet()
 
-        // 今回のレベルを「前回値」として記録（次回の消灯判定の材料）＋撤退ロックの状態
+        // 今回のレベルを「前回値」として記録（次回の消灯判定の材料）＋撤退ロックの状態。
+        // 米国側のフィールドは checkUsMarket が保存済みの値（saved に読み込み済み）を
+        // copy でそのまま持ち越す＝ここで消さない
         Storage.save(
             ctx,
-            Storage.Saved(status, pos, keep, nowLevel.name, status.litSignalKeys, retreatedAt)
+            saved.copy(
+                status = status, position = pos, notifiedKeys = keep,
+                lastLevel = nowLevel.name, lastLitSignals = status.litSignalKeys,
+                retreatedAt = retreatedAt
+            )
         )
         return Result.success()
+    }
+
+    /**
+     * 米国市場のチェック（取得→通知→保存まで独立に完結）。
+     * 点灯条件は52週DD-15% / 5日-8%の2本（検証45）。VIXは確信度＝金額の厚みだけ（検証46）。
+     * 撤退線-35%と出口-3%は日本側と同じ設計（検証32・46）
+     */
+    private fun checkUsMarket(ctx: Context) {
+        val us: UsMarketStatus = try {
+            MarketFetcherUs.fetch()
+        } catch (e: Exception) {
+            // 失敗の可視化（日本側と同じ2日連続ルール。カウンタは別キーで独立）
+            val (streak, counted) = recordFetchFailure(ctx, US_FAIL_SUFFIX)
+            if (counted && streak >= FAIL_NOTIFY_THRESHOLD) {
+                NotificationHelper.notify(
+                    ctx, NOTIF_ID_US_FETCH_FAIL,
+                    "⚠️ 米国市場データの取得に失敗しています",
+                    "米国市場データの取得に失敗しています（${streak}日連続）。" +
+                        "Yahoo Financeの障害か形式変更の可能性"
+                )
+            }
+            return   // 米国失敗でも日本側の処理は続行する
+        }
+        resetFetchFailure(ctx, US_FAIL_SUFFIX)
+
+        val saved = Storage.load(ctx)
+        val notified = saved.notifiedKeys.toMutableSet()
+        val pos = saved.usPosition
+
+        fun fireOnce(key: String, id: Int, title: String, text: String) {
+            val fullKey = "$key:${us.dataDate}"
+            if (fullKey !in notified) {
+                NotificationHelper.notify(ctx, id, title, text)
+                notified.add(fullKey)
+            }
+        }
+
+        // ─── 消灯（米国はDEEP/CALMの2値。浅い点灯は無い） ───
+        val prevLevel = LitLevel.fromName(saved.usLastLevel)
+        if (us.level.rank < prevLevel.rank) {
+            val turnedOff = saved.usLastLitSignals
+                .filter { it !in us.litSignalKeys }
+                .joinToString("・") { UsMarketStatus.signalLabel(it) }
+            val nowValues = "52週${fmtPct(us.dd52w)} / 5日${fmtPct(us.ret5d)} / " +
+                "VIX${"%.1f".format(us.vix)}"
+            val holdNote = if (pos != null) {
+                "保有中の分は消灯では売らない。出口は52週高値-3%回復のまま"
+            } else {
+                "次の点灯まで待機。追いかけて買わない"
+            }
+            fireOnce(
+                "us_off_deep", NOTIF_ID_US_LIGHTS_OFF, "🔵 米国：出動シグナル消灯",
+                "消えた条件: ${turnedOff.ifEmpty { "出動条件" }}。現在 $nowValues。$holdNote"
+            )
+        }
+
+        // ─── 撤退ライン（S&P500が52週高値-35%割れ）とロックの管理 ───
+        // 検証46 Part3: 合成3倍の最悪-84.6%→-63.4%、2008-06の-83%はロックで丸ごと回避
+        var usRetreatedAt = saved.usRetreatedAt
+        if (us.sigRetreat) {
+            if (usRetreatedAt == null) {
+                usRetreatedAt = us.dataDate
+                fireOnce(
+                    "us_retreat", NOTIF_ID_US_RETREAT, "🛑 米国：撤退シグナル（52週高値-35%割れ）",
+                    "S&P500 ${fmt(us.indexLast)}が撤退ライン${fmt(us.retreatLine)}を割りました。" +
+                        (if (pos != null) "SPXLは全売却。" else "") +
+                        "52週高値-3%（${fmt(us.exitLine)}）まで回復するまで新規出動しません"
+                )
+            }
+        } else if (usRetreatedAt != null && us.recovered) {
+            usRetreatedAt = null
+            fireOnce(
+                "us_unlock", NOTIF_ID_US_RETREAT, "🔓 米国：撤退ロック解除",
+                "S&P500が52週高値-3%まで回復しました。次の点灯から通常どおり出動できます"
+            )
+        }
+
+        if (us.deep) {
+            val reasons = buildList {
+                if (us.sigDd) add("52週高値から${fmtPct(us.dd52w)}")
+                if (us.sigFast) add("5日で${fmtPct(us.ret5d)}の急落")
+            }.joinToString(" / ")
+            if (usRetreatedAt != null) {
+                fireOnce(
+                    "us_deep_locked", NOTIF_ID_US_LIT, "⛔ 米国：点灯したが出動しません（撤退ロック中）",
+                    "$reasons。${usRetreatedAt}に撤退ライン割れ。" +
+                        "52週高値-3%（${fmt(us.exitLine)}）まで回復するまで待機"
+                )
+            } else {
+                // 確信度（VIX）。検証46: VIX<30の点灯は2008年型の危険信号でもある＝半分に抑える
+                val conf = if (us.vixHigh) {
+                    "VIX${"%.1f".format(us.vix)}＝確信度高。予算の満額で"
+                } else {
+                    "VIXが30未満＝確信度は標準。予算の半分に抑えて"
+                }
+                fireOnce(
+                    "us_deep", NOTIF_ID_US_LIT, "🚨 米国：出動シグナル点灯（S&P500）",
+                    "$reasons。$conf、SPXLを3分割で（詳細はアプリの米国タブで）"
+                )
+            }
+        }
+
+        // ─── ポジション保有中: 買い増し・出口 ───
+        if (pos != null) {
+            if (!pos.fill2Done && us.indexLast <= pos.trigger2) {
+                fireOnce(
+                    "us_fill2", NOTIF_ID_US_FILL2, "📉 米国：2回目の買い増し水準に到達",
+                    "S&P500 ${fmt(us.indexLast)} ≤ 基準-5%（${fmt(pos.trigger2)}）。予算の1/3を追加投入"
+                )
+            }
+            if (!pos.fill3Done && us.indexLast <= pos.trigger3) {
+                fireOnce(
+                    "us_fill3", NOTIF_ID_US_FILL3, "📉 米国：3回目の買い増し水準に到達",
+                    "S&P500 ${fmt(us.indexLast)} ≤ 基準-10%（${fmt(pos.trigger3)}）。残りの予算を投入"
+                )
+            }
+            if (us.recovered) {
+                fireOnce(
+                    "us_exit", NOTIF_ID_US_EXIT, "🏁 米国：出口シグナル（高値圏まで回復）",
+                    "S&P500が52週高値-3%以内に回復。SPXL全売却のタイミング"
+                )
+            }
+        }
+
+        // 米国分だけを保存（日本側フィールドは読み込んだ値をそのまま持ち越す）
+        Storage.save(
+            ctx,
+            saved.copy(
+                usStatus = us, notifiedKeys = notified,
+                usLastLevel = us.level.name, usLastLitSignals = us.litSignalKeys,
+                usRetreatedAt = usRetreatedAt
+            )
+        )
     }
 
     // ─── 連続失敗カウンタ（SharedPreferences） ───
@@ -202,32 +354,33 @@ class DailyCheckWorker(
     /**
      * 取得失敗を記録し、(連続失敗日数, 今回カウントを進めたか) を返す。
      * 同じ日に複数回失敗しても1日分としか数えない（日付でガード）。
+     * suffix="" が日本市場、US_FAIL_SUFFIX が米国市場（カウンタは別持ち）
      */
-    private fun recordFetchFailure(ctx: Context): Pair<Int, Boolean> {
+    private fun recordFetchFailure(ctx: Context, suffix: String = ""): Pair<Int, Boolean> {
         val prefs = ctx.getSharedPreferences(PREFS_HEALTH, Context.MODE_PRIVATE)
         val today = LocalDate.now(ZoneId.of("Asia/Tokyo")).toString()
-        val lastFailDate = prefs.getString(KEY_LAST_FAIL_DATE, null)
-        var streak = prefs.getInt(KEY_FAIL_STREAK, 0)
+        val lastFailDate = prefs.getString(KEY_LAST_FAIL_DATE + suffix, null)
+        var streak = prefs.getInt(KEY_FAIL_STREAK + suffix, 0)
         if (lastFailDate == today) {
             return streak to false   // 今日はカウント済み
         }
         streak += 1
         prefs.edit()
-            .putString(KEY_LAST_FAIL_DATE, today)
-            .putInt(KEY_FAIL_STREAK, streak)
+            .putString(KEY_LAST_FAIL_DATE + suffix, today)
+            .putInt(KEY_FAIL_STREAK + suffix, streak)
             .apply()
         return streak to true
     }
 
     /** 取得成功時に連続失敗カウンタをリセットする */
-    private fun resetFetchFailure(ctx: Context) {
+    private fun resetFetchFailure(ctx: Context, suffix: String = "") {
         val prefs = ctx.getSharedPreferences(PREFS_HEALTH, Context.MODE_PRIVATE)
-        if (prefs.getInt(KEY_FAIL_STREAK, 0) != 0 ||
-            prefs.getString(KEY_LAST_FAIL_DATE, null) != null
+        if (prefs.getInt(KEY_FAIL_STREAK + suffix, 0) != 0 ||
+            prefs.getString(KEY_LAST_FAIL_DATE + suffix, null) != null
         ) {
             prefs.edit()
-                .putInt(KEY_FAIL_STREAK, 0)
-                .remove(KEY_LAST_FAIL_DATE)
+                .putInt(KEY_FAIL_STREAK + suffix, 0)
+                .remove(KEY_LAST_FAIL_DATE + suffix)
                 .apply()
         }
     }
@@ -241,6 +394,16 @@ class DailyCheckWorker(
         private const val NOTIF_ID_FETCH_FAIL = 6                  // 通知ID（1〜5はシグナル系で使用済み）
         private const val NOTIF_ID_LIGHTS_OFF = 7                  // 消灯通知の通知ID
         private const val NOTIF_ID_RETREAT = 8                     // 撤退シグナル／ロック解除
+
+        // ─── 米国市場（v1.9。日本側の1〜8と衝突しないよう100番台） ───
+        private const val US_FAIL_SUFFIX = "_us"                   // 失敗カウンタのキー接尾辞
+        private const val NOTIF_ID_US_LIT = 101                    // 点灯／ロック中の点灯
+        private const val NOTIF_ID_US_FILL2 = 103                  // 2回目の買い増し
+        private const val NOTIF_ID_US_FILL3 = 104                  // 3回目の買い増し
+        private const val NOTIF_ID_US_EXIT = 105                   // 出口
+        private const val NOTIF_ID_US_FETCH_FAIL = 106             // 取得失敗
+        private const val NOTIF_ID_US_LIGHTS_OFF = 107             // 消灯
+        private const val NOTIF_ID_US_RETREAT = 108                // 撤退／ロック解除
 
         fun fmt(v: Double) = "%,.1f".format(v)
         fun fmtPct(v: Double) = "%+.1f%%".format(v * 100)

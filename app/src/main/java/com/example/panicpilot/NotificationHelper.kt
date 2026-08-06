@@ -60,6 +60,7 @@ object NotificationHelper {
         val n = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_dip_buy)
             .setColor(android.graphics.Color.parseColor("#FFAB00"))
+            .setLargeIcon(notifBadge(context, R.drawable.ic_badge_dip_buy))
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
@@ -69,4 +70,18 @@ object NotificationHelper {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(id, n)
     }
+}
+
+
+// 通知の大アイコン用: カラーの丸バッジ(ベクター)を Bitmap に焼いて返す。
+// 上端バーの小アイコンと違い、大アイコンはOSに白く塗り直されないので色が出る。
+private fun notifBadge(ctx: android.content.Context, resId: Int): android.graphics.Bitmap {
+    val size = ((ctx.resources.displayMetrics.density * 48).toInt()).coerceAtLeast(96)
+    val d = ctx.getDrawable(resId)!!
+    val bmp = android.graphics.Bitmap.createBitmap(
+        size, size, android.graphics.Bitmap.Config.ARGB_8888
+    )
+    d.setBounds(0, 0, size, size)
+    d.draw(android.graphics.Canvas(bmp))
+    return bmp
 }

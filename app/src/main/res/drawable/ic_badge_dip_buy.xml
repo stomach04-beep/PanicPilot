@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 通知の大アイコン（setLargeIcon）用バッジ：暴落のV字＋拾う点（PanicPilot（Be Greedy）用）
+     大アイコンはOSに白く塗られないのでカラーで出せる。
+     アクセント色の丸の中に、上端バーと同じ絵を白で置いている。
+     notification-icons/make_icons.py が自動生成しています。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFAB00"
+        android:pathData="M12,0 A12,12 0 1,0 12,24 A12,12 0 1,0 12,0 Z" />
+    <group
+        android:pivotX="12"
+        android:pivotY="12"
+        android:scaleX="0.56"
+        android:scaleY="0.56">
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="3.929"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M2.6,4.6 L8.0,14.0" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="3.929"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M12.7,14.6 L21.4,5.4" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="3.929"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M10,17.4 m-3.2,0 a3.2,3.2 0 1,0 6.4,0 a3.2,3.2 0 1,0 -6.4,0" />
+    </group>
+</vector>

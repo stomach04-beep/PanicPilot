@@ -15,8 +15,8 @@ android {
         applicationId = "com.example.panicpilot"
         minSdk = 31
         targetSdk = 36
-        versionCode = 10
-        versionName = "1.9"   // 2026-08-06: 米国タブ追加（S&P500×SPXL・検証45/46）
+        versionCode = 11
+        versionName = "2.0"   // 2026-08-07: タブを日本/米国の2階層に再構成（市場切替→機能タブ）
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

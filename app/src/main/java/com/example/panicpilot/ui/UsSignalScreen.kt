@@ -42,19 +42,15 @@ private val WarnAmber = Color(0xFFDBA13A)
 private val CalmGray = Color(0xFF8A8A8A)
 
 /**
- * 米国タブ: S&P500の出動シグナル表示＋SPXL出動計画＋ポジション追跡を1画面に。
+ * 米国・シグナルタブ: S&P500の出動シグナル表示（v2.0でタブを日本/米国の2階層に分け、
+ * 出動計画は UsPlanScreen へ分離）。
  * ルールは検証45・46で確認したもの（点灯2条件・VIX確信度・撤退線-35%）
  */
 @Composable
 fun UsSignalScreen(
     status: UsMarketStatus?,
-    position: Position?,
     retreatedAt: String?,          // 撤退ライン割れの日。null でなければ出動ロック中
-    lastError: String?,
-    onStart: (budgetYen: Long) -> Unit,
-    onFill2: () -> Unit,
-    onFill3: () -> Unit,
-    onClose: () -> Unit
+    lastError: String?
 ) {
     Column(
         modifier = Modifier
@@ -80,7 +76,7 @@ fun UsSignalScreen(
             )
             status.deep -> Triple(
                 "🚨 出動（米国）", FireRed,
-                "点灯中。VIXで金額を決めて、SPXLを3分割でエントリー（下の計画を参照）"
+                "点灯中。VIXで金額を決めて、SPXLを3分割でエントリー（出動タブで計画を作成）"
             )
             else -> Triple(
                 "😴 待機（米国）", CalmGray,
@@ -141,14 +137,6 @@ fun UsSignalScreen(
             }
         }
 
-        // ─── 出動計画／ポジション追跡 ───
-        if (retreatedAt != null) UsRetreatLockBanner(status, retreatedAt)
-        if (position == null) {
-            UsPlanBuilder(status, onStart)
-        } else {
-            UsPositionTracker(status, position, onFill2, onFill3, onClose)
-        }
-
         // ─── 注意書き（日本版との違い） ───
         Card(shape = RoundedCornerShape(14.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -163,6 +151,36 @@ fun UsSignalScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+    }
+}
+
+/**
+ * 米国・出動タブ: SPXLの出動計画とポジション追跡（日本版 PlanScreen と同じ構成）。
+ * v2.0でシグナルタブから分離した
+ */
+@Composable
+fun UsPlanScreen(
+    status: UsMarketStatus?,
+    position: Position?,
+    retreatedAt: String?,          // 撤退ライン割れの日。null でなければ出動ロック中
+    onStart: (budgetYen: Long) -> Unit,
+    onFill2: () -> Unit,
+    onFill3: () -> Unit,
+    onClose: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        if (retreatedAt != null) UsRetreatLockBanner(status, retreatedAt)
+        if (position == null) {
+            UsPlanBuilder(status, onStart)
+        } else {
+            UsPositionTracker(status, position, onFill2, onFill3, onClose)
         }
     }
 }

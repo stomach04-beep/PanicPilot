@@ -17,6 +17,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -42,6 +43,7 @@ import com.example.panicpilot.ui.HistoryScreen
 import com.example.panicpilot.ui.PlanScreen
 import com.example.panicpilot.ui.SignalScreen
 import com.example.panicpilot.ui.TrendScreen
+import com.example.panicpilot.ui.UsPlanScreen
 import com.example.panicpilot.ui.UsSignalScreen
 import com.example.panicpilot.ui.theme.PanicPilotTheme
 import java.text.SimpleDateFormat
@@ -84,7 +86,10 @@ private fun AppRoot() {
     var position by remember { mutableStateOf<Position?>(null) }
     var lastError by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
-    var tab by remember { mutableIntStateOf(0) }
+    // v2.0: タブを「市場（日本/米国）→ 機能」の2階層に。タブ位置は市場ごとに別々に覚える
+    var market by remember { mutableIntStateOf(0) }   // 0=日本 1=米国
+    var jpTab by remember { mutableIntStateOf(0) }
+    var usTab by remember { mutableIntStateOf(0) }
     // 撤退ライン割れの日（null なら通常運用）。設定・解除するのは DailyCheckWorker だけ
     var retreatedAt by remember { mutableStateOf<String?>(null) }
 
@@ -152,61 +157,80 @@ private fun AppRoot() {
         }
     ) { pad ->
         Column(Modifier.padding(pad)) {
-            // タブが多く固定幅では入り切らないのでスクロール可能なタブ行にする
-            ScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
-                listOf("シグナル", "推移", "出動", "🇺🇸米国", "根拠", "過去局面", "履歴")
-                    .forEachIndexed { i, label ->
-                        Tab(selected = tab == i, onClick = { tab = i },
+            // ─── 1段目: 市場切替（日本 / 米国） ───
+            TabRow(selectedTabIndex = market) {
+                listOf("🇯🇵 日本", "🇺🇸 米国").forEachIndexed { i, label ->
+                    Tab(selected = market == i, onClick = { market = i },
+                        text = { Text(label) })
+                }
+            }
+            // ─── 2段目: 市場ごとの機能タブ ───
+            if (market == 0) {
+                ScrollableTabRow(selectedTabIndex = jpTab, edgePadding = 8.dp) {
+                    listOf("シグナル", "推移", "出動", "根拠", "過去局面", "履歴")
+                        .forEachIndexed { i, label ->
+                            Tab(selected = jpTab == i, onClick = { jpTab = i },
+                                text = { Text(label) })
+                        }
+                }
+                when (jpTab) {
+                    0 -> SignalScreen(status, lastError)
+                    1 -> TrendScreen(status)
+                    2 -> PlanScreen(
+                        status = status,
+                        position = position,
+                        retreatedAt = retreatedAt,
+                        onStart = { budget ->
+                            val s = status ?: return@PlanScreen
+                            val jst = TimeZone.getTimeZone("Asia/Tokyo")
+                            val today = SimpleDateFormat("yyyy-MM-dd", Locale.JAPAN)
+                                .apply { timeZone = jst }.format(Date())
+                            position = Position(
+                                entryDate = today,
+                                baseIndex = s.indexLast,
+                                budgetYen = budget
+                            )
+                            persist()
+                        },
+                        onFill2 = { position = position?.copy(fill2Done = true); persist() },
+                        onFill3 = { position = position?.copy(fill3Done = true); persist() },
+                        onClose = { position = null; persist() }
+                    )
+                    3 -> EvidenceScreen()
+                    4 -> CrashHistoryScreen(status)
+                    5 -> HistoryScreen()
+                }
+            } else {
+                ScrollableTabRow(selectedTabIndex = usTab, edgePadding = 8.dp) {
+                    listOf("シグナル", "出動", "履歴").forEachIndexed { i, label ->
+                        Tab(selected = usTab == i, onClick = { usTab = i },
                             text = { Text(label) })
                     }
-            }
-            when (tab) {
-                0 -> SignalScreen(status, lastError)
-                1 -> TrendScreen(status)
-                2 -> PlanScreen(
-                    status = status,
-                    position = position,
-                    retreatedAt = retreatedAt,
-                    onStart = { budget ->
-                        val s = status ?: return@PlanScreen
-                        val jst = TimeZone.getTimeZone("Asia/Tokyo")
-                        val today = SimpleDateFormat("yyyy-MM-dd", Locale.JAPAN)
-                            .apply { timeZone = jst }.format(Date())
-                        position = Position(
-                            entryDate = today,
-                            baseIndex = s.indexLast,
-                            budgetYen = budget
-                        )
-                        persist()
-                    },
-                    onFill2 = { position = position?.copy(fill2Done = true); persist() },
-                    onFill3 = { position = position?.copy(fill3Done = true); persist() },
-                    onClose = { position = null; persist() }
-                )
-                3 -> UsSignalScreen(
-                    status = usStatus,
-                    position = usPosition,
-                    retreatedAt = usRetreatedAt,
-                    lastError = usLastError,
-                    onStart = { budget ->
-                        val s = usStatus ?: return@UsSignalScreen
-                        val jst = TimeZone.getTimeZone("Asia/Tokyo")
-                        val today = SimpleDateFormat("yyyy-MM-dd", Locale.JAPAN)
-                            .apply { timeZone = jst }.format(Date())
-                        usPosition = Position(
-                            entryDate = today,
-                            baseIndex = s.indexLast,
-                            budgetYen = budget
-                        )
-                        persist()
-                    },
-                    onFill2 = { usPosition = usPosition?.copy(fill2Done = true); persist() },
-                    onFill3 = { usPosition = usPosition?.copy(fill3Done = true); persist() },
-                    onClose = { usPosition = null; persist() }
-                )
-                4 -> EvidenceScreen()
-                5 -> CrashHistoryScreen(status)
-                6 -> HistoryScreen()
+                }
+                when (usTab) {
+                    0 -> UsSignalScreen(usStatus, usRetreatedAt, usLastError)
+                    1 -> UsPlanScreen(
+                        status = usStatus,
+                        position = usPosition,
+                        retreatedAt = usRetreatedAt,
+                        onStart = { budget ->
+                            val s = usStatus ?: return@UsPlanScreen
+                            val jst = TimeZone.getTimeZone("Asia/Tokyo")
+                            val today = SimpleDateFormat("yyyy-MM-dd", Locale.JAPAN)
+                                .apply { timeZone = jst }.format(Date())
+                            usPosition = Position(
+                                entryDate = today,
+                                baseIndex = s.indexLast,
+                                budgetYen = budget
+                            )
+                            persist()
+                        },
+                        onFill2 = { usPosition = usPosition?.copy(fill2Done = true); persist() },
+                        onFill3 = { usPosition = usPosition?.copy(fill3Done = true); persist() },
+                        onClose = { usPosition = null; persist() }
+                    )
+                    2 -> HistoryScreen()   // 履歴は日米共通（全通知を1つのログに記録している）
+                }
             }
         }
     }

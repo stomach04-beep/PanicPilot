@@ -43,8 +43,11 @@ import com.example.panicpilot.ui.HistoryScreen
 import com.example.panicpilot.ui.PlanScreen
 import com.example.panicpilot.ui.SignalScreen
 import com.example.panicpilot.ui.TrendScreen
+import com.example.panicpilot.ui.UsCrashHistoryScreen
+import com.example.panicpilot.ui.UsEvidenceScreen
 import com.example.panicpilot.ui.UsPlanScreen
 import com.example.panicpilot.ui.UsSignalScreen
+import com.example.panicpilot.ui.UsTrendScreen
 import com.example.panicpilot.ui.theme.PanicPilotTheme
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -149,7 +152,9 @@ private fun AppRoot() {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (loading) "暴落出動ナビ（更新中…）" else "暴落出動ナビ") },
+                // アプリ名は v2.1 で「Be Greedy」に改名（バフェットの格言
+                // "Be greedy when others are fearful" ＝他人が恐れているときこそ貪欲に）
+                title = { Text(if (loading) "Be Greedy（更新中…）" else "Be Greedy") },
                 actions = {
                     IconButton(onClick = { refresh() }) { Text("↻") }
                 }
@@ -202,14 +207,16 @@ private fun AppRoot() {
                 }
             } else {
                 ScrollableTabRow(selectedTabIndex = usTab, edgePadding = 8.dp) {
-                    listOf("シグナル", "出動", "履歴").forEachIndexed { i, label ->
-                        Tab(selected = usTab == i, onClick = { usTab = i },
-                            text = { Text(label) })
-                    }
+                    listOf("シグナル", "推移", "出動", "根拠", "過去局面", "履歴")
+                        .forEachIndexed { i, label ->
+                            Tab(selected = usTab == i, onClick = { usTab = i },
+                                text = { Text(label) })
+                        }
                 }
                 when (usTab) {
                     0 -> UsSignalScreen(usStatus, usRetreatedAt, usLastError)
-                    1 -> UsPlanScreen(
+                    1 -> UsTrendScreen(usStatus)
+                    2 -> UsPlanScreen(
                         status = usStatus,
                         position = usPosition,
                         retreatedAt = usRetreatedAt,
@@ -229,7 +236,9 @@ private fun AppRoot() {
                         onFill3 = { usPosition = usPosition?.copy(fill3Done = true); persist() },
                         onClose = { usPosition = null; persist() }
                     )
-                    2 -> HistoryScreen()   // 履歴は日米共通（全通知を1つのログに記録している）
+                    3 -> UsEvidenceScreen()
+                    4 -> UsCrashHistoryScreen(usStatus)
+                    5 -> HistoryScreen()   // 履歴は日米共通（全通知を1つのログに記録している）
                 }
             }
         }

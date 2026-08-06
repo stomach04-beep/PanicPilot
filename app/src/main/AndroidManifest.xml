@@ -14,15 +14,17 @@
         android:name=".PanicPilotApp"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="暴落出動ナビ"
+        android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.PanicPilot">
 
+        <!-- ラベルは strings.xml の app_name を参照する。
+             直書きすると strings.xml を変えてもホーム画面の名前が変わらない（v2.1.1で修正） -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:label="暴落出動ナビ">
+            android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

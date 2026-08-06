@@ -15,8 +15,8 @@ android {
         applicationId = "com.example.panicpilot"
         minSdk = 31
         targetSdk = 36
-        versionCode = 12
-        versionName = "2.1"   // 2026-08-07: 「Be Greedy」へ改名＋米国に推移/根拠/過去局面タブ追加
+        versionCode = 13
+        versionName = "2.1.1" // 2026-08-07: マニフェスト直書きラベルを@string/app_name参照に（ホーム画面の名前が変わらなかった修正）
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

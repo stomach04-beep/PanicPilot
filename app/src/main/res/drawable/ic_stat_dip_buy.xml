@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 通知（ステータスバー）用アイコン：暴落のV字＋拾う点
+     対象アプリ：PanicPilot（Be Greedy） ／ シリーズ：カラフル
+     ステータスバーはアルファ値だけを使うので白単色で描く。tint は付けない。
+     通知シェードのアクセント色は Kotlin 側で指定する:
+       .setColor(android.graphics.Color.parseColor("#FFAB00"))
+     （上端バーのアイコン自体は仕様どおり白のまま）
+     notification-icons/make_icons.py が自動生成しています。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M2.6,4.6 L8.0,14.0" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12.7,14.6 L21.4,5.4" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M10,17.4 m-3.2,0 a3.2,3.2 0 1,0 6.4,0 a3.2,3.2 0 1,0 -6.4,0" />
+</vector>

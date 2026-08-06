@@ -85,6 +85,18 @@ object Storage {
                     usdJpy = s.optDouble("usdJpy").takeIf { !it.isNaN() },
                     indexRecent = s.optJSONArray("indexRecent")?.let { a ->
                         (0 until a.length()).map { a.getDouble(it) }
+                    } ?: emptyList(),
+                    // 推移データ（v2.1追加。無い旧保存ファイルなら空リスト）
+                    history = s.optJSONArray("history")?.let { a ->
+                        (0 until a.length()).map { i ->
+                            val h = a.getJSONObject(i)
+                            UsHistoryPoint(
+                                date = h.getString("date"),
+                                dd52w = h.getDouble("dd52w"),
+                                ret5d = h.optDouble("ret5d", Double.NaN),
+                                vix = h.optDouble("vix", Double.NaN)
+                            )
+                        }
                     } ?: emptyList()
                 )
             }
@@ -159,6 +171,17 @@ object Storage {
                 s.spxl?.let { put("spxl", it) }
                 s.usdJpy?.let { put("usdJpy", it) }
                 put("indexRecent", JSONArray(s.indexRecent))
+                // 推移データ（v2.1）
+                put("history", JSONArray().apply {
+                    s.history.forEach { h ->
+                        put(JSONObject().apply {
+                            put("date", h.date)
+                            put("dd52w", h.dd52w)
+                            if (!h.ret5d.isNaN()) put("ret5d", h.ret5d)
+                            if (!h.vix.isNaN()) put("vix", h.vix)
+                        })
+                    }
+                })
             })
         }
         saved.usPosition?.let { p ->

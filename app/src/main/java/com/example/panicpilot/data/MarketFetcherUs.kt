@@ -21,8 +21,9 @@ object MarketFetcherUs {
     // ^ はURLでは %5E にエスケープする
     private const val GSPC_URL =
         "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?range=2y&interval=1d"
+    // VIXは推移タブ（約1年分の日次系列）にも使うので range=1y で取る
     private const val VIX_URL =
-        "https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?range=1mo&interval=1d"
+        "https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?range=1y&interval=1d"
     private const val SPXL_URL =
         "https://query1.finance.yahoo.com/v8/finance/chart/SPXL?range=5d&interval=1d"
     private const val FX_URL =
@@ -88,18 +89,38 @@ object MarketFetcherUs {
         val dd = last.second / high52w - 1.0
         val ret5d = if (n > 5) last.second / idxAll[n - 6] - 1.0 else 0.0
 
-        // VIXは当日欄が未確定のことがあるので最後の有効値（日本版の日経VIと同じ扱い）
-        val vixLast = try {
-            parseCloses(httpGet(VIX_URL)).lastOrNull()?.second ?: Double.NaN
+        // VIX（約1年分）。当日欄が未確定のことがあるので最新値は最後の有効値
+        val vixRows = try {
+            parseCloses(httpGet(VIX_URL)).sortedBy { it.first }
         } catch (e: Exception) {
-            Double.NaN
+            emptyList()
         }
+        val vixLast = vixRows.lastOrNull()?.second ?: Double.NaN
 
         // 日付は米国東部時間で（JSTだと金曜終値が土曜に化ける既知の罠）
         val et = TimeZone.getTimeZone("America/New_York")
         val dayFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = et }
         val jst = TimeZone.getTimeZone("Asia/Tokyo")
         val minFmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.JAPAN).apply { timeZone = jst }
+
+        // ─── 推移タブ用: 直近252営業日の指標を日ごとに再計算（日本版と同じ方式） ───
+        // VIXは日付文字列で突き合わせる（^GSPCと^VIXで営業日が微妙にズレることがあるため）
+        val vixByDate = vixRows.associate { dayFmt.format(Date(it.first * 1000L)) to it.second }
+        val histFrom = maxOf(0, n - 252)
+        val history = ArrayList<UsHistoryPoint>(n - histFrom)
+        for (i in histFrom until n) {
+            val winStart = maxOf(0, i - 251)
+            val hiI = idxAll.subList(winStart, i + 1).max()
+            val dateI = dayFmt.format(Date(rows[i].first * 1000L))
+            history.add(
+                UsHistoryPoint(
+                    date = dateI,
+                    dd52w = idxAll[i] / hiI - 1.0,
+                    ret5d = if (i >= 5) idxAll[i] / idxAll[i - 5] - 1.0 else Double.NaN,
+                    vix = vixByDate[dateI] ?: Double.NaN
+                )
+            )
+        }
 
         return UsMarketStatus(
             dataDate = dayFmt.format(Date(last.first * 1000L)),
@@ -111,7 +132,8 @@ object MarketFetcherUs {
             ret5d = ret5d,
             spxl = fetchLastPrice(SPXL_URL),
             usdJpy = fetchLastPrice(FX_URL),
-            indexRecent = idxAll.subList(maxOf(0, n - 60), n)
+            indexRecent = idxAll.subList(maxOf(0, n - 60), n),
+            history = history
         )
     }
 }

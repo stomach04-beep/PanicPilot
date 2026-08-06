@@ -15,7 +15,9 @@ data class UsMarketStatus(
     val spxl: Double?,           // SPXL（S&P500ブル3倍）の終値USD（取得失敗時 null）
     val usdJpy: Double?,         // ドル円（円建て口数計算の目安用。取得失敗時 null）
     // スパークライン・推移表示用に直近60営業日のS&P500を保持
-    val indexRecent: List<Double> = emptyList()
+    val indexRecent: List<Double> = emptyList(),
+    // 推移タブ用に直近約1年（252営業日）の指標の日次系列を保持（v2.1）
+    val history: List<UsHistoryPoint> = emptyList()
 ) {
     // ─── 点灯判定（検証45: 日本版と同じしきい値が米国でも機能） ───
     val sigDd: Boolean get() = dd52w <= TH_DD          // 52週高値-15%
@@ -69,4 +71,15 @@ data class UsMarketStatus(
             else -> key
         }
     }
+}
+
+// ─── 米国の過去推移の1日分（日本版 HistoryPoint の米国版。点灯判定は同じ定数を参照） ───
+data class UsHistoryPoint(
+    val date: String,        // yyyy-MM-dd（米国東部）
+    val dd52w: Double,       // その日の52週高値からの下落率
+    val ret5d: Double,       // その日の5営業日リターン（NaN=算出不可）
+    val vix: Double          // その日のVIX終値（NaN=欠損）
+) {
+    val litDd: Boolean get() = dd52w <= UsMarketStatus.TH_DD
+    val litFast: Boolean get() = !ret5d.isNaN() && ret5d <= UsMarketStatus.TH_FAST
 }

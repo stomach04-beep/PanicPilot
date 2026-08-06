@@ -30,8 +30,9 @@ import com.example.panicpilot.data.HistoryPoint
 import com.example.panicpilot.data.MarketStatus
 
 // グラフ配色（シグナル画面と同じ相場慣習）
-private val FireRed = Color(0xFFE05B4C)
-private val WarnAmber = Color(0xFFDBA13A)
+// v2.1: 米国推移タブ（UsTrendScreen）とチャート部品を共用するため internal に変更
+internal val TrendFireRed = Color(0xFFE05B4C)
+internal val TrendWarnAmber = Color(0xFFDBA13A)
 
 /** 推移タブ: 3指標の過去約1年（252営業日）の折れ線グラフ */
 @Composable
@@ -63,9 +64,10 @@ fun TrendScreen(status: MarketStatus?) {
         IndicatorChart(
             title = "日経平均 52週高値からの下落率",
             hist = hist,
+            dateOf = { it.date },
             valueOf = { it.dd52w * 100.0 },
             litOf = { it.litDd },
-            thresholds = listOf(ThLine(MarketStatus.TH_DD * 100.0, FireRed, "点灯 -15%")),
+            thresholds = listOf(ThLine(MarketStatus.TH_DD * 100.0, TrendFireRed, "点灯 -15%")),
             valueLabel = { "%+.0f%%".format(it) },
             currentLabel = { "%+.1f%%".format(it) }
         )
@@ -74,9 +76,10 @@ fun TrendScreen(status: MarketStatus?) {
         IndicatorChart(
             title = "日経平均 5日間リターン（急落検知）",
             hist = hist,
+            dateOf = { it.date },
             valueOf = { it.ret5d * 100.0 },
             litOf = { it.litFast },
-            thresholds = listOf(ThLine(MarketStatus.TH_FAST * 100.0, FireRed, "点灯 -8%")),
+            thresholds = listOf(ThLine(MarketStatus.TH_FAST * 100.0, TrendFireRed, "点灯 -8%")),
             valueLabel = { "%+.0f%%".format(it) },
             currentLabel = { "%+.1f%%".format(it) }
         )
@@ -85,11 +88,12 @@ fun TrendScreen(status: MarketStatus?) {
         IndicatorChart(
             title = "25日騰落レシオ",
             hist = hist,
+            dateOf = { it.date },
             valueOf = { it.adr25 },
             litOf = { it.litAdr },
             thresholds = listOf(
-                ThLine(MarketStatus.TH_ADR_DEEP, FireRed, "点灯 70"),
-                ThLine(MarketStatus.TH_ADR_SHALLOW, WarnAmber, "注意 80")
+                ThLine(MarketStatus.TH_ADR_DEEP, TrendFireRed, "点灯 70"),
+                ThLine(MarketStatus.TH_ADR_SHALLOW, TrendWarnAmber, "注意 80")
             ),
             valueLabel = { "%.0f".format(it) },
             currentLabel = { "%.1f".format(it) }
@@ -104,16 +108,17 @@ fun TrendScreen(status: MarketStatus?) {
     }
 }
 
-/** 水平しきい値ライン1本の定義 */
-private data class ThLine(val value: Double, val color: Color, val label: String)
+/** 水平しきい値ライン1本の定義（日米の推移タブで共用） */
+internal data class ThLine(val value: Double, val color: Color, val label: String)
 
-/** 指標1つ分のカード＋折れ線グラフ */
+/** 指標1つ分のカード＋折れ線グラフ（日米の推移タブで共用のためジェネリック） */
 @Composable
-private fun IndicatorChart(
+internal fun <T> IndicatorChart(
     title: String,
-    hist: List<HistoryPoint>,
-    valueOf: (HistoryPoint) -> Double,
-    litOf: (HistoryPoint) -> Boolean,
+    hist: List<T>,
+    dateOf: (T) -> String,
+    valueOf: (T) -> Double,
+    litOf: (T) -> Boolean,
     thresholds: List<ThLine>,
     valueLabel: (Double) -> String,      // 軸目盛り用（整数など短め）
     currentLabel: (Double) -> String     // 最新値用（小数1桁）
@@ -121,7 +126,7 @@ private fun IndicatorChart(
     // NaN は「欠損」として保持（線は切るが x位置は保つ）
     val values = hist.map { valueOf(it) }
     val lits = hist.map { litOf(it) }
-    val dates = hist.map { it.date }
+    val dates = hist.map { dateOf(it) }
     val valid = values.filter { !it.isNaN() }
     if (valid.isEmpty()) return
 
@@ -147,7 +152,7 @@ private fun IndicatorChart(
                         "最新 " + currentLabel(it),
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp,
-                        color = if (lits.last()) FireRed else onSurface
+                        color = if (lits.last()) TrendFireRed else onSurface
                     )
                 }
             }
@@ -264,7 +269,7 @@ private fun DrawScope.drawIndicator(
     for (i in 0 until n) {
         val v = values[i]
         if (v.isNaN() || !lits[i]) continue
-        drawCircle(color = FireRed, radius = 3.5f, center = Offset(xAt(i), yAt(v)))
+        drawCircle(color = TrendFireRed, radius = 3.5f, center = Offset(xAt(i), yAt(v)))
     }
 
     // ─── 横軸: 開始・中央・終了の3つの日付（MM/dd） ───

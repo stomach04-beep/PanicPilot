@@ -15,8 +15,8 @@ android {
         applicationId = "com.example.panicpilot"
         minSdk = 31
         targetSdk = 36
-        versionCode = 11
-        versionName = "2.0"   // 2026-08-07: タブを日本/米国の2階層に再構成（市場切替→機能タブ）
+        versionCode = 12
+        versionName = "2.1"   // 2026-08-07: 「Be Greedy」へ改名＋米国に推移/根拠/過去局面タブ追加
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

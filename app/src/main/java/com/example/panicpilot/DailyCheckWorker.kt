@@ -411,7 +411,7 @@ class DailyCheckWorker(
                 "rung1:$start", NOTIF_ID_TPX_RUNG1,
                 "🪜 1306はしご：1段目に到達（-15%）",
                 "1306が1段目${fmt(tpx.lineRung1)}円に到達。予算の1/3を投入。" +
-                    "現在${fmt(tpx.close)}円（${fmtPct(tpx.dd52w)}）。買ったら最低12ヶ月保有"
+                    "現在${fmt(tpx.close)}円（${fmtPct(tpx.dd52w)}）。買った玉は売らずに恒久保有（検証50）"
             )
             if (tpx.rung2Hit) fireOnce(
                 "rung2:$start", NOTIF_ID_TPX_RUNG2,

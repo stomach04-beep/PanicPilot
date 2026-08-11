@@ -177,8 +177,9 @@ private fun TopixLadderCard(tpx: TopixLadderStatus?) {
             InfoRow("2段目 -20%", "%,.1f円 %s".format(tpx.lineRung2, rungLabel(tpx.rung2Hit)))
             InfoRow("3段目 -25%", "%,.1f円 %s".format(tpx.lineRung3, rungLabel(tpx.rung3Hit)))
             Text(
-                "検証48 E60: 各段で予算の1/3、60営業日で未投入分を全額投入。買ったら最低12ヶ月保有・" +
-                    "恒久保有可（レバと違い減価なし）。日経レバの点灯とは別枠（検証49: 両者は補完）",
+                "検証48 E60: 各段で予算の1/3、60営業日で未投入分を全額投入。買った玉は売らずに恒久保有" +
+                    "（検証50: 12Mで売って回すと年率6% vs 恒久+撤退線9.4%。出口は日経-35%撤退線のみ）。" +
+                    "日経レバの点灯とは別枠（検証49: 両者は補完）",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

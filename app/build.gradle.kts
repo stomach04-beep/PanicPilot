@@ -15,8 +15,8 @@ android {
         applicationId = "com.example.panicpilot"
         minSdk = 31
         targetSdk = 36
-        versionCode = 14
-        versionName = "2.2" // 2026-08-11: 1306（TOPIX）E60はしごを日経レバ点灯と別枠で追加（検証48）
+        versionCode = 15
+        versionName = "2.2.1" // 2026-08-11: 1306バッドティックガード＋保有方針を恒久保有へ（検証50）
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

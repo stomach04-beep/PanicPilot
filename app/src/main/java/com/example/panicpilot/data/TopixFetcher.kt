@@ -66,9 +66,27 @@ object TopixFetcher {
         return out
     }
 
+    /**
+     * バッドティック（偽の値飛び）を除去する。
+     * Yahooの1306データには日付を誤った分割レコード由来の異常値が実在する
+     * （2026-03-30/31だけ価格が1/10スケール＝偽の-90%と+948%。2026-08-11実測）。
+     * TOPIX ETFの実際の日次変動は最大でも±12%程度なので、直前の正常値から
+     * ±25%を超えて飛んだ日は捨てる。放置すると偽の暴落ではしごが誤発火する
+     */
+    private fun dropBadTicks(rows: List<Pair<Long, Double>>): List<Pair<Long, Double>> {
+        val out = ArrayList<Pair<Long, Double>>(rows.size)
+        var last = Double.NaN
+        for (r in rows) {
+            if (!last.isNaN() && kotlin.math.abs(r.second / last - 1.0) > 0.25) continue
+            out.add(r)
+            last = r.second
+        }
+        return out
+    }
+
     /** 1306の2年日足からはしご状態のスナップショットを作る */
     fun fetch(): TopixLadderStatus {
-        val rows = parseCloses(httpGet(URL_1306)).sortedBy { it.first }
+        val rows = dropBadTicks(parseCloses(httpGet(URL_1306)).sortedBy { it.first })
         require(rows.size >= 260) { "1306の行数不足: ${rows.size}行（ソース障害の可能性）" }
 
         val closes = rows.map { it.second }

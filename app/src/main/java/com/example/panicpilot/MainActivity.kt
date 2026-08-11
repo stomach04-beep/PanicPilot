@@ -36,6 +36,8 @@ import com.example.panicpilot.data.MarketFetcherUs
 import com.example.panicpilot.data.MarketStatus
 import com.example.panicpilot.data.Position
 import com.example.panicpilot.data.Storage
+import com.example.panicpilot.data.TopixFetcher
+import com.example.panicpilot.data.TopixLadderStatus
 import com.example.panicpilot.data.UsMarketStatus
 import com.example.panicpilot.ui.CrashHistoryScreen
 import com.example.panicpilot.ui.EvidenceScreen
@@ -102,6 +104,9 @@ private fun AppRoot() {
     var usLastError by remember { mutableStateOf<String?>(null) }
     var usRetreatedAt by remember { mutableStateOf<String?>(null) }
 
+    // ─── TOPIX（1306）はしご（v2.2・検証48）。日経レバ用シグナルとは別枠 ───
+    var tpxStatus by remember { mutableStateOf<TopixLadderStatus?>(null) }
+
     fun persist() {
         // 通知まわりの記録（通知済みキー・前回の点灯レベル）は画面側では触らず、
         // 読み込んだ値をそのまま書き戻す（消灯通知の判定材料を消さないため）
@@ -109,7 +114,8 @@ private fun AppRoot() {
         Storage.save(
             context,
             saved.copy(status = status, position = position,
-                       usStatus = usStatus, usPosition = usPosition)
+                       usStatus = usStatus, usPosition = usPosition,
+                       tpxStatus = tpxStatus ?: saved.tpxStatus)
         )
     }
 
@@ -124,6 +130,10 @@ private fun AppRoot() {
             val usResult = withContext(Dispatchers.IO) {
                 runCatching { MarketFetcherUs.fetch() }
             }
+            // 1306はしご（失敗しても他を巻き込まない fail-soft）
+            val tpxResult = withContext(Dispatchers.IO) {
+                runCatching { TopixFetcher.fetch() }
+            }
             jpResult.onSuccess {
                 status = it
                 lastError = null
@@ -132,7 +142,8 @@ private fun AppRoot() {
                 usStatus = it
                 usLastError = null
             }.onFailure { usLastError = it.message ?: "不明なエラー" }
-            if (jpResult.isSuccess || usResult.isSuccess) persist()
+            tpxResult.onSuccess { tpxStatus = it }
+            if (jpResult.isSuccess || usResult.isSuccess || tpxResult.isSuccess) persist()
             loading = false
         }
     }
@@ -146,6 +157,7 @@ private fun AppRoot() {
         usStatus = saved.usStatus
         usPosition = saved.usPosition
         usRetreatedAt = saved.usRetreatedAt
+        tpxStatus = saved.tpxStatus
         refresh()
     }
 
@@ -179,7 +191,7 @@ private fun AppRoot() {
                         }
                 }
                 when (jpTab) {
-                    0 -> SignalScreen(status, lastError)
+                    0 -> SignalScreen(status, lastError, tpxStatus)
                     1 -> TrendScreen(status)
                     2 -> PlanScreen(
                         status = status,

@@ -15,8 +15,8 @@ android {
         applicationId = "com.example.panicpilot"
         minSdk = 31
         targetSdk = 36
-        versionCode = 13
-        versionName = "2.1.1" // 2026-08-07: マニフェスト直書きラベルを@string/app_name参照に（ホーム画面の名前が変わらなかった修正）
+        versionCode = 14
+        versionName = "2.2" // 2026-08-11: 1306（TOPIX）E60はしごを日経レバ点灯と別枠で追加（検証48）
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

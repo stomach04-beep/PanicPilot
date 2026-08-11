@@ -8,6 +8,8 @@ import com.example.panicpilot.data.MarketFetcher
 import com.example.panicpilot.data.MarketFetcherUs
 import com.example.panicpilot.data.MarketStatus
 import com.example.panicpilot.data.Storage
+import com.example.panicpilot.data.TopixFetcher
+import com.example.panicpilot.data.TopixLadderStatus
 import com.example.panicpilot.data.UsMarketStatus
 import java.time.LocalDate
 import java.time.ZoneId
@@ -40,6 +42,10 @@ class DailyCheckWorker(
         // 米国が失敗しても日本側は続行し、日本が失敗（下のretry/failure）しても
         // 米国の通知と保存は済んでいる＝どちらかのデータ源障害がもう片方を殺さない
         checkUsMarket(ctx)
+
+        // ─── TOPIX（1306）はしごのチェック（v2.2・検証48） ───
+        // 日経レバ用の3条件とは別枠。これも独立に 取得→通知→保存 まで完結させる
+        checkTopixLadder(ctx)
 
         val status = try {
             MarketFetcher.fetch()
@@ -349,6 +355,106 @@ class DailyCheckWorker(
         )
     }
 
+    /**
+     * TOPIX（1306）E60はしごのチェック（v2.2・検証48）。
+     * 日経レバ用の点灯とは完全に別枠のシグナル。取得→通知→保存まで独立に完結。
+     * ルール: -10%割れで60営業日の時計スタート（買わない）→ -15/-20/-25%で各1/3 →
+     *         60営業日で未投入分を全額投入 → -3%回復でエピソード終了
+     * 通知の重複防止はエピソード開始日キー（tpxNotifiedKeys）＝1エピソード各1回
+     */
+    private fun checkTopixLadder(ctx: Context) {
+        val tpx: TopixLadderStatus = try {
+            TopixFetcher.fetch()
+        } catch (e: Exception) {
+            val (streak, counted) = recordFetchFailure(ctx, TPX_FAIL_SUFFIX)
+            if (counted && streak >= FAIL_NOTIFY_THRESHOLD) {
+                NotificationHelper.notify(
+                    ctx, NOTIF_ID_TPX_FETCH_FAIL,
+                    "⚠️ 1306（TOPIX）データの取得に失敗しています",
+                    "1306はしご用のデータ取得に失敗しています（${streak}日連続）。" +
+                        "Yahoo Financeの障害か形式変更の可能性"
+                )
+            }
+            return   // TOPIX失敗でも他の処理は続行する
+        }
+        resetFetchFailure(ctx, TPX_FAIL_SUFFIX)
+
+        val saved = Storage.load(ctx)
+        // 前回のエピソード開始日は Worker 専用フィールドから読む。
+        // tpxStatus.clockStartDate を前回値に使うと画面の更新で上書きされ、
+        // 「エピソード終了」の遷移が消えて通知が出なくなる（lastLevel と同じ既知の罠）
+        val prevClockStart = saved.tpxLastClockStart
+        val notified = saved.tpxNotifiedKeys.toMutableSet()
+
+        fun fireOnce(key: String, id: Int, title: String, text: String) {
+            if (key !in notified) {
+                NotificationHelper.notify(ctx, id, title, text)
+                notified.add(key)
+            }
+        }
+
+        val lines = "1段目${fmt(tpx.lineRung1)}円(-15%) / 2段目${fmt(tpx.lineRung2)}円(-20%) / " +
+            "3段目${fmt(tpx.lineRung3)}円(-25%)"
+
+        val start = tpx.clockStartDate
+        if (start != null) {
+            // ─── 時計スタート（エピソード開始。この時点では買わない） ───
+            fireOnce(
+                "clock:$start", NOTIF_ID_TPX_CLOCK,
+                "🪜 1306はしご：時計スタート（52週高値-10%割れ）",
+                "1306が${fmt(tpx.close)}円（52週高値から${fmtPct(tpx.dd52w)}）。" +
+                    "まだ買いません。ここから60営業日の時計が進みます。買いは $lines。" +
+                    "各段で予算の1/3ずつ（検証48 E60）"
+            )
+            // ─── 段の到達（深い順にチェックし、同日に複数段抜けたら全部知らせる） ───
+            if (tpx.rung1Hit) fireOnce(
+                "rung1:$start", NOTIF_ID_TPX_RUNG1,
+                "🪜 1306はしご：1段目に到達（-15%）",
+                "1306が1段目${fmt(tpx.lineRung1)}円に到達。予算の1/3を投入。" +
+                    "現在${fmt(tpx.close)}円（${fmtPct(tpx.dd52w)}）。買ったら最低12ヶ月保有"
+            )
+            if (tpx.rung2Hit) fireOnce(
+                "rung2:$start", NOTIF_ID_TPX_RUNG2,
+                "🪜 1306はしご：2段目に到達（-20%）",
+                "1306が2段目${fmt(tpx.lineRung2)}円に到達。予算の1/3を追加投入。" +
+                    "現在${fmt(tpx.close)}円（${fmtPct(tpx.dd52w)}）"
+            )
+            if (tpx.rung3Hit) fireOnce(
+                "rung3:$start", NOTIF_ID_TPX_RUNG3,
+                "🪜 1306はしご：3段目に到達（-25%）",
+                "1306が3段目${fmt(tpx.lineRung3)}円に到達。残りの予算を投入。" +
+                    "現在${fmt(tpx.close)}円（${fmtPct(tpx.dd52w)}）"
+            )
+            // ─── 60営業日タイムアウト（未投入分の全額投入） ───
+            if (tpx.timedOut) fireOnce(
+                "timeout:$start", NOTIF_ID_TPX_TIMEOUT,
+                "⏰ 1306はしご：60営業日経過（タイムアウト）",
+                "時計スタート（$start）から60営業日。未投入分があれば全額投入します（検証48 E60: " +
+                    "「安値が来たら拾う＋来なければ諦めて入れる」の両取り）。現在${fmt(tpx.close)}円"
+            )
+        } else if (prevClockStart != null) {
+            // ─── エピソード終了（52週高値-3%以内へ回復） ───
+            fireOnce(
+                "reset:$prevClockStart", NOTIF_ID_TPX_RESET,
+                "✅ 1306はしご：エピソード終了（高値圏へ回復）",
+                "1306が52週高値-3%以内へ回復しました。時計をリセット。" +
+                    "保有分は売らず恒久保有へ（次の-10%割れで新しい時計が始まります）"
+            )
+        }
+
+        // キーの肥大防止: 現エピソードのキーと直近の終了キーだけ残す（それ以外は流す）
+        val keep = notified.filter { k ->
+            (start != null && k.endsWith(start)) || k.startsWith("reset:")
+        }.toMutableSet()
+        // resetキーも増えすぎないように上限（エピソードは年1〜2回なので実際は数個）
+        val keepCapped = if (keep.size > 20) {
+            keep.filter { start != null && it.endsWith(start) }.toMutableSet()
+        } else keep
+
+        Storage.save(ctx, saved.copy(tpxStatus = tpx, tpxNotifiedKeys = keepCapped,
+                                     tpxLastClockStart = tpx.clockStartDate))
+    }
+
     // ─── 連続失敗カウンタ（SharedPreferences） ───
 
     /**
@@ -404,6 +510,16 @@ class DailyCheckWorker(
         private const val NOTIF_ID_US_FETCH_FAIL = 106             // 取得失敗
         private const val NOTIF_ID_US_LIGHTS_OFF = 107             // 消灯
         private const val NOTIF_ID_US_RETREAT = 108                // 撤退／ロック解除
+
+        // ─── TOPIXはしご（v2.2。日本1〜8・米国100番台と衝突しない200番台） ───
+        private const val TPX_FAIL_SUFFIX = "_tpx"                 // 失敗カウンタのキー接尾辞
+        private const val NOTIF_ID_TPX_CLOCK = 201                 // 時計スタート
+        private const val NOTIF_ID_TPX_RUNG1 = 202                 // 1段目到達（-15%）
+        private const val NOTIF_ID_TPX_RUNG2 = 203                 // 2段目到達（-20%）
+        private const val NOTIF_ID_TPX_RUNG3 = 204                 // 3段目到達（-25%）
+        private const val NOTIF_ID_TPX_TIMEOUT = 205               // 60営業日タイムアウト
+        private const val NOTIF_ID_TPX_RESET = 206                 // エピソード終了（回復）
+        private const val NOTIF_ID_TPX_FETCH_FAIL = 207            // 取得失敗
 
         fun fmt(v: Double) = "%,.1f".format(v)
         fun fmtPct(v: Double) = "%+.1f%%".format(v * 100)

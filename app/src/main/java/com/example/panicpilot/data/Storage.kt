@@ -115,8 +115,27 @@ object Storage {
             } ?: emptySet()
             val usRetreatedAt = root.optString("usRetreatedAt").takeIf { it.isNotEmpty() }
 
+            // ─── TOPIXはしご（v2.2追加。旧保存ファイルには無いので null/空 可） ───
+            val tpxStatus = root.optJSONObject("tpxStatus")?.let { s ->
+                TopixLadderStatus(
+                    dataDate = s.getString("dataDate"),
+                    fetchedAt = s.getString("fetchedAt"),
+                    close = s.getDouble("close"),
+                    high52w = s.getDouble("high52w"),
+                    dd52w = s.getDouble("dd52w"),
+                    clockStartDate = s.optString("clockStartDate").takeIf { it.isNotEmpty() },
+                    elapsedBiz = s.optInt("elapsedBiz", 0),
+                    minDdSinceClock = s.optDouble("minDdSinceClock", Double.NaN)
+                )
+            }
+            val tpxNotified = root.optJSONArray("tpxNotified")?.let { a ->
+                (0 until a.length()).map { a.getString(it) }.toSet()
+            } ?: emptySet()
+            val tpxLastClockStart = root.optString("tpxLastClockStart").takeIf { it.isNotEmpty() }
+
             Saved(status, pos, notified, lastLevel, lastSignals, retreatedAt,
-                  usStatus, usPos, usLastLevel, usLastSignals, usRetreatedAt)
+                  usStatus, usPos, usLastLevel, usLastSignals, usRetreatedAt,
+                  tpxStatus, tpxNotified, tpxLastClockStart)
         } catch (e: Exception) {
             Saved(null, null, emptySet(), null, emptySet())   // 壊れていたら初期状態から
         }
@@ -195,6 +214,20 @@ object Storage {
         root.put("usLastLitSignals", JSONArray(saved.usLastLitSignals.toList()))
         saved.usRetreatedAt?.let { root.put("usRetreatedAt", it) }
 
+        // ─── TOPIXはしご（v2.2追加） ───
+        saved.tpxStatus?.let { s ->
+            root.put("tpxStatus", JSONObject().apply {
+                put("dataDate", s.dataDate); put("fetchedAt", s.fetchedAt)
+                put("close", s.close); put("high52w", s.high52w)
+                put("dd52w", s.dd52w)
+                s.clockStartDate?.let { put("clockStartDate", it) }
+                put("elapsedBiz", s.elapsedBiz)
+                if (!s.minDdSinceClock.isNaN()) put("minDdSinceClock", s.minDdSinceClock)
+            })
+        }
+        root.put("tpxNotified", JSONArray(saved.tpxNotifiedKeys.toList()))
+        saved.tpxLastClockStart?.let { root.put("tpxLastClockStart", it) }
+
         val f = file(context)
         val tmp = File(f.parentFile, "$FILE_NAME.tmp")
         tmp.writeText(root.toString(), Charsets.UTF_8)
@@ -225,6 +258,18 @@ object Storage {
         val usPosition: Position? = null,      // Position は共用（基準値がS&P500になるだけ）
         val usLastLevel: String? = null,       // LitLevel.name（DEEP/CALM。SHALLOWは使わない）
         val usLastLitSignals: Set<String> = emptySet(),
-        val usRetreatedAt: String? = null
+        val usRetreatedAt: String? = null,
+
+        // ─── TOPIXはしご（v2.2追加。日経レバ用シグナルとは別枠） ───
+        val tpxStatus: TopixLadderStatus? = null,
+        // 通知済みキー（"clock:2026-08-15" のようにエピソード開始日でキー化＝
+        //  1エピソードにつき各通知1回。日次キーの notifiedKeys とは別持ちにして
+        //  30件プルーニングに巻き込まれないようにする）
+        val tpxNotifiedKeys: Set<String> = emptySet(),
+        // ↓「エピソード終了」通知のための前回エピソード開始日。lastLevel と同じ方針で
+        //   Worker（checkTopixLadder）だけが更新する。tpxStatus.clockStartDate を前回値に
+        //   使うと、画面の更新でtpxStatusが上書きされ終了の遷移が消えて通知が出なくなる
+        //   （v1.4で踏んだ既知の罠と同じ構造）
+        val tpxLastClockStart: String? = null
     )
 }

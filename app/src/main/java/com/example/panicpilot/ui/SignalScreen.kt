@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.panicpilot.data.MarketStatus
+import com.example.panicpilot.data.TopixLadderStatus
 
 // 点灯色（日本の相場慣習: 点灯=注意すべき状態なので赤系、待機=グレー）
 private val FireRed = Color(0xFFE05B4C)
@@ -33,7 +34,11 @@ private val GoGreen = Color(0xFF3D9C5A)
 
 /** メイン: 出動シグナルの状態表示 */
 @Composable
-fun SignalScreen(status: MarketStatus?, lastError: String?) {
+fun SignalScreen(
+    status: MarketStatus?,
+    lastError: String?,
+    tpx: TopixLadderStatus? = null   // 1306はしご（v2.2。日経レバ用シグナルとは別枠）
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -111,6 +116,9 @@ fun SignalScreen(status: MarketStatus?, lastError: String?) {
                 "出動の可否は変えず、出す金額を満額にするかの判断に使う"
         )
 
+        // ─── 1306はしご（TOPIX・検証48 E60）。日経レバ用の点灯とは別枠のシグナル ───
+        TopixLadderCard(tpx)
+
         // ─── 参考情報 ───
         Card(shape = RoundedCornerShape(14.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -127,6 +135,58 @@ fun SignalScreen(status: MarketStatus?, lastError: String?) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+    }
+}
+
+/**
+ * 1306（TOPIX ETF）E60はしごカード（v2.2・検証48）。
+ * 日経レバの点灯（PanicPilot 3条件）とは独立した「恒久はしご」のシグナル:
+ *  -10%割れで60営業日の時計スタート → -15/-20/-25%で各1/3 → 60営業日で残投入
+ */
+@Composable
+private fun TopixLadderCard(tpx: TopixLadderStatus?) {
+    Card(shape = RoundedCornerShape(14.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            // 状態に応じた見出し
+            val (head, headColor) = when {
+                tpx == null -> "🪜 1306はしご（TOPIX）" to CalmGray
+                tpx.timedOut -> "🪜 1306はしご：⏰タイムアウト（残り全額投入）" to FireRed
+                tpx.clockRunning -> "🪜 1306はしご：時計進行中" to WarnAmber
+                else -> "🪜 1306はしご：平常（-10%待ち）" to CalmGray
+            }
+            Text(head, fontWeight = FontWeight.SemiBold, color = headColor)
+            if (tpx == null) {
+                Text("1306のデータ未取得（↻で再取得）",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                return@Column
+            }
+
+            InfoRow("1306 現在値", "%,.1f円（52週高値から%+.1f%%）"
+                .format(tpx.close, tpx.dd52w * 100))
+            if (tpx.clockRunning) {
+                InfoRow("時計", "${tpx.clockStartDate}開始 / ${tpx.elapsedBiz}営業日経過" +
+                    (if (tpx.timedOut) "（60日超過）" else "（60日で残投入）"))
+            } else {
+                InfoRow("時計スタート（-10%）", "%,.1f円（まだ買わない）".format(tpx.lineClock))
+            }
+            // 3段のライン。時計進行中は到達済みかどうかを✅で示す
+            fun rungLabel(hit: Boolean) = if (tpx.clockRunning && hit) "✅到達（1/3投入）" else ""
+            InfoRow("1段目 -15%", "%,.1f円 %s".format(tpx.lineRung1, rungLabel(tpx.rung1Hit)))
+            InfoRow("2段目 -20%", "%,.1f円 %s".format(tpx.lineRung2, rungLabel(tpx.rung2Hit)))
+            InfoRow("3段目 -25%", "%,.1f円 %s".format(tpx.lineRung3, rungLabel(tpx.rung3Hit)))
+            Text(
+                "検証48 E60: 各段で予算の1/3、60営業日で未投入分を全額投入。買ったら最低12ヶ月保有・" +
+                    "恒久保有可（レバと違い減価なし）。日経レバの点灯とは別枠（検証49: 両者は補完）",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                "データ日付: ${tpx.dataDate}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

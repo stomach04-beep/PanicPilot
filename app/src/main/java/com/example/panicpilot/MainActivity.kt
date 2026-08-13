@@ -31,6 +31,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.example.panicpilot.data.GoldFetcher
+import com.example.panicpilot.data.GoldPlan
+import com.example.panicpilot.data.GoldStatus
 import com.example.panicpilot.data.MarketFetcher
 import com.example.panicpilot.data.MarketFetcherUs
 import com.example.panicpilot.data.MarketStatus
@@ -41,6 +44,9 @@ import com.example.panicpilot.data.TopixLadderStatus
 import com.example.panicpilot.data.UsMarketStatus
 import com.example.panicpilot.ui.CrashHistoryScreen
 import com.example.panicpilot.ui.EvidenceScreen
+import com.example.panicpilot.ui.GoldAllocScreen
+import com.example.panicpilot.ui.GoldEvidenceScreen
+import com.example.panicpilot.ui.GoldPlanScreen
 import com.example.panicpilot.ui.HistoryScreen
 import com.example.panicpilot.ui.PlanScreen
 import com.example.panicpilot.ui.SignalScreen
@@ -92,9 +98,10 @@ private fun AppRoot() {
     var lastError by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     // v2.0: タブを「市場（日本/米国）→ 機能」の2階層に。タブ位置は市場ごとに別々に覚える
-    var market by remember { mutableIntStateOf(0) }   // 0=日本 1=米国
+    var market by remember { mutableIntStateOf(0) }   // 0=日本 1=米国 2=金
     var jpTab by remember { mutableIntStateOf(0) }
     var usTab by remember { mutableIntStateOf(0) }
+    var goldTab by remember { mutableIntStateOf(0) }
     // 撤退ライン割れの日（null なら通常運用）。設定・解除するのは DailyCheckWorker だけ
     var retreatedAt by remember { mutableStateOf<String?>(null) }
 
@@ -107,6 +114,10 @@ private fun AppRoot() {
     // ─── TOPIX（1306）はしご（v2.2・検証48）。日経レバ用シグナルとは別枠 ───
     var tpxStatus by remember { mutableStateOf<TopixLadderStatus?>(null) }
 
+    // ─── 金スリーブ（v2.3）。点灯シグナルは持たない＝分割の執行と配分の維持だけ ───
+    var goldStatus by remember { mutableStateOf<GoldStatus?>(null) }
+    var goldPlan by remember { mutableStateOf<GoldPlan?>(null) }
+
     fun persist() {
         // 通知まわりの記録（通知済みキー・前回の点灯レベル）は画面側では触らず、
         // 読み込んだ値をそのまま書き戻す（消灯通知の判定材料を消さないため）
@@ -115,7 +126,9 @@ private fun AppRoot() {
             context,
             saved.copy(status = status, position = position,
                        usStatus = usStatus, usPosition = usPosition,
-                       tpxStatus = tpxStatus ?: saved.tpxStatus)
+                       tpxStatus = tpxStatus ?: saved.tpxStatus,
+                       goldStatus = goldStatus ?: saved.goldStatus,
+                       goldPlan = goldPlan)
         )
     }
 
@@ -142,8 +155,14 @@ private fun AppRoot() {
                 usStatus = it
                 usLastError = null
             }.onFailure { usLastError = it.message ?: "不明なエラー" }
+            // 金ETF（314A）も独立取得。失敗しても他を巻き込まない fail-soft
+            val goldResult = withContext(Dispatchers.IO) {
+                runCatching { GoldFetcher.fetch() }
+            }
             tpxResult.onSuccess { tpxStatus = it }
-            if (jpResult.isSuccess || usResult.isSuccess || tpxResult.isSuccess) persist()
+            goldResult.onSuccess { goldStatus = it }
+            if (jpResult.isSuccess || usResult.isSuccess ||
+                tpxResult.isSuccess || goldResult.isSuccess) persist()
             loading = false
         }
     }
@@ -158,6 +177,8 @@ private fun AppRoot() {
         usPosition = saved.usPosition
         usRetreatedAt = saved.usRetreatedAt
         tpxStatus = saved.tpxStatus
+        goldStatus = saved.goldStatus
+        goldPlan = saved.goldPlan
         refresh()
     }
 
@@ -176,7 +197,7 @@ private fun AppRoot() {
         Column(Modifier.padding(pad)) {
             // ─── 1段目: 市場切替（日本 / 米国） ───
             TabRow(selectedTabIndex = market) {
-                listOf("🇯🇵 日本", "🇺🇸 米国").forEachIndexed { i, label ->
+                listOf("🇯🇵 日本", "🇺🇸 米国", "🥇 金").forEachIndexed { i, label ->
                     Tab(selected = market == i, onClick = { market = i },
                         text = { Text(label) })
                 }
@@ -217,7 +238,7 @@ private fun AppRoot() {
                     4 -> CrashHistoryScreen(status)
                     5 -> HistoryScreen()
                 }
-            } else {
+            } else if (market == 1) {
                 ScrollableTabRow(selectedTabIndex = usTab, edgePadding = 8.dp) {
                     listOf("シグナル", "推移", "出動", "根拠", "過去局面", "履歴")
                         .forEachIndexed { i, label ->
@@ -251,6 +272,55 @@ private fun AppRoot() {
                     3 -> UsEvidenceScreen()
                     4 -> UsCrashHistoryScreen(usStatus)
                     5 -> HistoryScreen()   // 履歴は日米共通（全通知を1つのログに記録している）
+                }
+            } else {
+                // ─── 金スリーブ（v2.3）───
+                // 日米と違い「シグナル」タブが無い。金のタイミングルールは24本総当たり＋
+                // プラセボ検定で全部棄却されたので、当てにいく画面をあえて作っていない
+                ScrollableTabRow(selectedTabIndex = goldTab, edgePadding = 8.dp) {
+                    listOf("計画", "配分", "根拠").forEachIndexed { i, label ->
+                        Tab(selected = goldTab == i, onClick = { goldTab = i },
+                            text = { Text(label) })
+                    }
+                }
+                when (goldTab) {
+                    0 -> GoldPlanScreen(
+                        status = goldStatus,
+                        plan = goldPlan,
+                        onStart = { target, months ->
+                            goldPlan = GoldPlan(
+                                startDate = GoldPlan.todayJst(),
+                                targetYen = target,
+                                months = months
+                            )
+                            persist()
+                        },
+                        onBuyDone = { amount ->
+                            goldPlan = goldPlan?.let {
+                                it.copy(
+                                    doneCount = (it.doneCount + 1).coerceAtMost(it.months),
+                                    investedYen = it.investedYen + amount,
+                                    // 買った分は保有額にも足しておく（配分タブの手入力を減らす）
+                                    holdingYen = it.holdingYen + amount
+                                )
+                            }
+                            persist()
+                        },
+                        onReset = { goldPlan = null; persist() }
+                    )
+                    1 -> GoldAllocScreen(
+                        plan = goldPlan,
+                        onUpdateAmounts = { risk, hold ->
+                            goldPlan = goldPlan?.copy(riskAssetYen = risk, holdingYen = hold)
+                                ?: GoldPlan(
+                                    startDate = GoldPlan.todayJst(),
+                                    targetYen = 0L, months = GoldPlan.MONTHS_MAX,
+                                    riskAssetYen = risk, holdingYen = hold
+                                )
+                            persist()
+                        }
+                    )
+                    2 -> GoldEvidenceScreen()
                 }
             }
         }

@@ -133,9 +133,33 @@ object Storage {
             } ?: emptySet()
             val tpxLastClockStart = root.optString("tpxLastClockStart").takeIf { it.isNotEmpty() }
 
+            // ─── 金スリーブ（v2.3追加。旧保存ファイルには無いので null 可） ───
+            val goldStatus = root.optJSONObject("goldStatus")?.let { s ->
+                GoldStatus(
+                    dataDate = s.getString("dataDate"),
+                    fetchedAt = s.getString("fetchedAt"),
+                    price = s.getDouble("price"),
+                    high52w = s.getDouble("high52w"),
+                    dd52w = s.getDouble("dd52w"),
+                    rsi14 = s.optDouble("rsi14", Double.NaN)
+                )
+            }
+            val goldPlan = root.optJSONObject("goldPlan")?.let { p ->
+                GoldPlan(
+                    startDate = p.getString("startDate"),
+                    targetYen = p.getLong("targetYen"),
+                    months = p.getInt("months"),
+                    doneCount = p.optInt("doneCount", 0),
+                    investedYen = p.optLong("investedYen", 0L),
+                    riskAssetYen = p.optLong("riskAssetYen", 0L),
+                    holdingYen = p.optLong("holdingYen", 0L)
+                )
+            }
+
             Saved(status, pos, notified, lastLevel, lastSignals, retreatedAt,
                   usStatus, usPos, usLastLevel, usLastSignals, usRetreatedAt,
-                  tpxStatus, tpxNotified, tpxLastClockStart)
+                  tpxStatus, tpxNotified, tpxLastClockStart,
+                  goldStatus, goldPlan)
         } catch (e: Exception) {
             Saved(null, null, emptySet(), null, emptySet())   // 壊れていたら初期状態から
         }
@@ -228,6 +252,24 @@ object Storage {
         root.put("tpxNotified", JSONArray(saved.tpxNotifiedKeys.toList()))
         saved.tpxLastClockStart?.let { root.put("tpxLastClockStart", it) }
 
+        // ─── 金スリーブ（v2.3追加） ───
+        saved.goldStatus?.let { s ->
+            root.put("goldStatus", JSONObject().apply {
+                put("dataDate", s.dataDate); put("fetchedAt", s.fetchedAt)
+                put("price", s.price); put("high52w", s.high52w)
+                put("dd52w", s.dd52w)
+                if (!s.rsi14.isNaN()) put("rsi14", s.rsi14)
+            })
+        }
+        saved.goldPlan?.let { p ->
+            root.put("goldPlan", JSONObject().apply {
+                put("startDate", p.startDate); put("targetYen", p.targetYen)
+                put("months", p.months); put("doneCount", p.doneCount)
+                put("investedYen", p.investedYen)
+                put("riskAssetYen", p.riskAssetYen); put("holdingYen", p.holdingYen)
+            })
+        }
+
         val f = file(context)
         val tmp = File(f.parentFile, "$FILE_NAME.tmp")
         tmp.writeText(root.toString(), Charsets.UTF_8)
@@ -270,6 +312,12 @@ object Storage {
         //   Worker（checkTopixLadder）だけが更新する。tpxStatus.clockStartDate を前回値に
         //   使うと、画面の更新でtpxStatusが上書きされ終了の遷移が消えて通知が出なくなる
         //   （v1.4で踏んだ既知の罠と同じ構造）
-        val tpxLastClockStart: String? = null
+        val tpxLastClockStart: String? = null,
+
+        // ─── 金スリーブ（v2.3追加）。点灯シグナルは持たない＝通知キーも不要。
+        //   金のタイミングルールは24本総当たり＋プラセボ検定で全部棄却されたので、
+        //   このタブは「決めた配分を淡々と実行する執行ナビ」として作っている ───
+        val goldStatus: GoldStatus? = null,
+        val goldPlan: GoldPlan? = null
     )
 }

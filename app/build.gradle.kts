@@ -15,8 +15,8 @@ android {
         applicationId = "com.example.panicpilot"
         minSdk = 31
         targetSdk = 36
-        versionCode = 15
-        versionName = "2.2.1" // 2026-08-11: 1306バッドティックガード＋保有方針を恒久保有へ（検証50）
+        versionCode = 16
+        versionName = "2.3" // 2026-08-12: 金スリーブタブ追加（314A・分割執行＋バンド±25%。買い時シグナルは検証で棄却）
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

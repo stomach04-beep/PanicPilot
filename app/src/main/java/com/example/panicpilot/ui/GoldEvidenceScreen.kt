@@ -15,6 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.panicpilot.data.GoldStatus
 
@@ -124,15 +125,21 @@ fun GoldEvidenceScreen() {
     }
 }
 
+/**
+ * ラベルと値の1行。値が長いと SpaceBetween だけでは折り返しが重なるので、
+ * 両方に weight を持たせて各列の中で折り返させる（実機で崩れを確認して修正）
+ */
 @Composable
 private fun EvLine(label: String, value: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         if (label.isNotEmpty()) {
             Text(label, style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(end = 8.dp))
+                modifier = Modifier.weight(1f).padding(end = 8.dp))
         }
         Text(value, style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.Medium)
+            fontWeight = FontWeight.Medium,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(if (label.isEmpty()) 2.3f else 1.3f))
     }
 }

@@ -24,19 +24,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
 import com.example.panicpilot.data.GoldPlan
 import com.example.panicpilot.data.GoldStatus
 
-/** 金タブ共通の1行表示 */
+/**
+ * 金タブ共通の1行表示。値が長いと SpaceBetween だけでは折り返しが重なるので、
+ * 両方に weight を持たせて各列の中で折り返させる（実機で崩れを確認して修正）
+ */
 @Composable
 private fun GoldLine(label: String, value: String, strong: Boolean = false) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f).padding(end = 8.dp))
         Text(value, style = MaterialTheme.typography.bodyMedium,
-            fontWeight = if (strong) FontWeight.Bold else FontWeight.Normal)
+            fontWeight = if (strong) FontWeight.Bold else FontWeight.Normal,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1.1f))
     }
 }
 

@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.panicpilot.data.GoldPlan
 
@@ -114,10 +115,11 @@ fun GoldAllocScreen(
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("なぜこのやり方か（検証の結論）", fontWeight = FontWeight.SemiBold)
                 AllocLine("配分", "リスク資産の5〜10%")
-                AllocLine("10%にした場合", "最大DD -63.3%→-59.0% / CAGR -0.30pt")
-                AllocLine("リバランス", "バンド±25%（26年で13〜23回だけ）")
-                AllocLine("年1回リバランスなら", "26回・四半期なら104回の取引")
-                AllocLine("積立期の戻し方", "売らずに新規資金で（税ゼロで同等の結果）")
+                AllocLine("10%にした場合", "最大DD -63.3%→-59.0%")
+                AllocLine("そのときのCAGR", "-0.30pt")
+                AllocLine("リバランス", "バンド±25%（26年で13〜23回）")
+                AllocLine("年1回なら", "26回・四半期なら104回の取引")
+                AllocLine("積立期の戻し方", "売らずに新規資金で")
                 Text(
                     "毎月10万円・金10%を26年続けた検証では、ノーセル方式9.29倍に対し" +
                     "売買リバランスは9.33倍。差はごくわずかで、税を払う価値はありません。",
@@ -129,12 +131,19 @@ fun GoldAllocScreen(
     }
 }
 
+/**
+ * ラベルと値の1行。値が長いと SpaceBetween だけでは折り返しが重なるので、
+ * 両方に weight を持たせて各列の中で折り返させる（実機で崩れを確認して修正）
+ */
 @Composable
 private fun AllocLine(label: String, value: String, strong: Boolean = false) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f).padding(end = 8.dp))
         Text(value, style = MaterialTheme.typography.bodyMedium,
-            fontWeight = if (strong) FontWeight.Bold else FontWeight.Normal)
+            fontWeight = if (strong) FontWeight.Bold else FontWeight.Normal,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1.3f))
     }
 }

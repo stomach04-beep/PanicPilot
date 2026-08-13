@@ -15,8 +15,8 @@ android {
         applicationId = "com.example.panicpilot"
         minSdk = 31
         targetSdk = 36
-        versionCode = 16
-        versionName = "2.3" // 2026-08-12: 金スリーブタブ追加（314A・分割執行＋バンド±25%。買い時シグナルは検証で棄却）
+        versionCode = 17
+        versionName = "2.3.1" // 2026-08-13: 金タブの行レイアウト崩れ修正（長い値が重なる）
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

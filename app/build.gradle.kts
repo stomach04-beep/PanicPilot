@@ -15,8 +15,8 @@ android {
         applicationId = "com.example.panicpilot"
         minSdk = 31
         targetSdk = 36
-        versionCode = 17
-        versionName = "2.3.1" // 2026-08-13: 金タブの行レイアウト崩れ修正（長い値が重なる）
+        versionCode = 18
+        versionName = "2.3.2" // 2026-08-18: 撤退通知の本文を「1458保有分は全売却」に固定（アプリ内ポジション未登録でも出す）
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

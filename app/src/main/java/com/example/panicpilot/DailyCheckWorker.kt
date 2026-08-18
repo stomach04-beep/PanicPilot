@@ -132,7 +132,9 @@ class DailyCheckWorker(
                     "retreat", NOTIF_ID_RETREAT, "🛑 撤退シグナル（52週高値-35%割れ）",
                     "日経平均 ${fmt(status.indexLast)}円が撤退ライン" +
                         "${fmt(status.retreatLine)}円を割りました。" +
-                        (if (pos != null) "保有分は全売却。" else "") +
+                        // 1458はアプリ外（楽天証券24株・2026-08-10ルール）でも保有しているので、
+                        // アプリ内のポジション登録の有無にかかわらず必ず「全売却」を出す
+                        "1458の保有分は全売却（アプリ外の保有も含む）。" +
                         "52週高値-3%（${fmt(status.exitLine)}円）まで回復するまで新規出動しません"
                 )
             }

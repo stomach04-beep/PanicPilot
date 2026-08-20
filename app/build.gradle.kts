@@ -1,4 +1,4 @@
-﻿plugins {
+plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
@@ -15,8 +15,8 @@ android {
         applicationId = "com.example.panicpilot"
         minSdk = 31
         targetSdk = 36
-        versionCode = 18
-        versionName = "2.3.2" // 2026-08-18: 撤退通知の本文を「1458保有分は全売却」に固定（アプリ内ポジション未登録でも出す）
+        versionCode = 19
+        versionName = "2.3.3" // 2026-08-18: 撤退通知の本文を「1458保有分は全売却」に固定（アプリ内ポジション未登録でも出す）
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

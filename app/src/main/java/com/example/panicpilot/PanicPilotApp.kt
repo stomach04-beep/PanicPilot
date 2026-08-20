@@ -27,6 +27,10 @@ class PanicPilotApp : Application() {
         /** 日次チェックWorkの一意名 */
         private const val WORK_NAME = "daily_market_check"
 
+        /** 「今どういう予定で登録済みか」を覚えておく場所（毎起動の再登録を避けるため） */
+        private const val SCHEDULE_PREFS = "panicpilot_schedule"
+        private const val KEY_SCHEDULED_SIGNATURE = "scheduled_signature"
+
         /**
          * 毎日1回、引け後（16:30 JST目標）に市場チェックを走らせる。
          * WorkManagerの周期実行は正確な時刻を保証しないが、
@@ -56,13 +60,26 @@ class PanicPilotApp : Application() {
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.MINUTES)
                 .build()
 
+            // 【なぜ毎回UPDATEしないか】UPDATEは実行中のジョブを中断（onStopJob）して
+            // 再スケジュールする。このWorkerが発火するとプロセスが起動し、
+            // Application.onCreate がここを呼ぶため、「自分を起こしたジョブを中断して
+            // 作り直す」形になる。中断されても中身は走り切るので二重実行になり、
+            // 最悪 initialDelay が翌日の16:30に付け直されてその日のチェックが飛ぶ。
+            // EtfBuyAlert v1.20 で実機ログ（generation 2818まで増加・同一通知3連発）
+            // から特定した事故と同じ構造なので、同じ対策を入れる。
+            // 予定時刻が変わったときだけUPDATE、同じならKEEP＝既存の登録に触らない。
+            val prefs = context.applicationContext
+                .getSharedPreferences(SCHEDULE_PREFS, Context.MODE_PRIVATE)
+            val signature = "16:30/24h"   // 予定の内容。変えたらここも変える
+            val changed = prefs.getString(KEY_SCHEDULED_SIGNATURE, null) != signature
+
             WorkManager.getInstance(context.applicationContext).enqueueUniquePeriodicWork(
                 WORK_NAME,
-                // UPDATE: 既存スケジュールを新しい内容で更新する
-                // （KEEPだとアプリ更新後も旧スケジュールが残り、実行時刻の変更が反映されない）
-                ExistingPeriodicWorkPolicy.UPDATE,
+                if (changed) ExistingPeriodicWorkPolicy.UPDATE
+                else ExistingPeriodicWorkPolicy.KEEP,
                 request
             )
+            if (changed) prefs.edit().putString(KEY_SCHEDULED_SIGNATURE, signature).apply()
         }
     }
 }

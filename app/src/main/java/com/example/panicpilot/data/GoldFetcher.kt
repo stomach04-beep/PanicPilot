@@ -1,12 +1,9 @@
 package com.example.panicpilot.data
 
-import java.net.HttpURLConnection
-import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
-import org.json.JSONObject
 
 /**
  * 金ETF（314A: iシェアーズ ゴールドETF）の日足を Yahoo Finance chart API から取る。
@@ -21,41 +18,10 @@ object GoldFetcher {
 
     private const val URL_GOLD =
         "https://query1.finance.yahoo.com/v8/finance/chart/314A.T?range=2y&interval=1d"
-    private const val UA =
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
-
-    private fun httpGet(url: String): String {
-        val conn = URL(url).openConnection() as HttpURLConnection
-        conn.connectTimeout = 15000
-        conn.readTimeout = 15000
-        conn.setRequestProperty("User-Agent", UA)
-        try {
-            if (conn.responseCode != 200) {
-                throw IllegalStateException("HTTP ${conn.responseCode}: $url")
-            }
-            return conn.inputStream.bufferedReader(Charsets.UTF_8).readText()
-        } finally {
-            conn.disconnect()
-        }
-    }
 
     /** 分配金調整済みの adjclose を優先（1306で踏んだ「分配落ちが下落に化ける」罠と同じ対策） */
-    private fun parseCloses(body: String): List<Pair<Long, Double>> {
-        val result = JSONObject(body).getJSONObject("chart")
-            .getJSONArray("result").getJSONObject(0)
-        val ts = result.optJSONArray("timestamp") ?: return emptyList()
-        val indicators = result.getJSONObject("indicators")
-        val closes = indicators.optJSONArray("adjclose")?.optJSONObject(0)
-            ?.optJSONArray("adjclose")
-            ?: indicators.getJSONArray("quote").getJSONObject(0).optJSONArray("close")
-            ?: return emptyList()
-        val out = ArrayList<Pair<Long, Double>>(ts.length())
-        for (i in 0 until ts.length()) {
-            val c = closes.optDouble(i)
-            if (!c.isNaN() && c > 0) out.add(ts.getLong(i) to c)
-        }
-        return out
-    }
+    private fun parseCloses(body: String): List<Pair<Long, Double>> =
+        YahooChart.parseCloses(body, preferAdj = true)
 
     /** 偽の値飛びを除去（1306で実在した誤日付の分割レコード対策を横展開） */
     private fun dropBadTicks(rows: List<Pair<Long, Double>>): List<Pair<Long, Double>> {
@@ -93,7 +59,7 @@ object GoldFetcher {
     }
 
     fun fetch(): GoldStatus {
-        val rows = dropBadTicks(parseCloses(httpGet(URL_GOLD)).sortedBy { it.first })
+        val rows = dropBadTicks(parseCloses(YahooChart.httpGet(URL_GOLD)).sortedBy { it.first })
         require(rows.size >= 30) { "314Aの行数不足: ${rows.size}行（ソース障害の可能性）" }
 
         val closes = rows.map { it.second }

@@ -15,8 +15,8 @@ android {
         applicationId = "com.example.panicpilot"
         minSdk = 31
         targetSdk = 36
-        versionCode = 19
-        versionName = "2.3.3" // 2026-08-18: 撤退通知の本文を「1458保有分は全売却」に固定（アプリ内ポジション未登録でも出す）
+        versionCode = 20
+        versionName = "2.3.4" // 2026-09-19: Yahoo取得に再試行3回＋末尾null行のmeta補完（YahooChartへ集約）・失敗理由を記録して通知文にも表示
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

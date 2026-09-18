@@ -1,7 +1,5 @@
 package com.example.panicpilot.data
 
-import java.net.HttpURLConnection
-import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -28,40 +26,14 @@ object MarketFetcherUs {
         "https://query1.finance.yahoo.com/v8/finance/chart/SPXL?range=5d&interval=1d"
     private const val FX_URL =
         "https://query1.finance.yahoo.com/v8/finance/chart/JPY=X?range=5d&interval=1d"
-    private const val UA =
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+    /**
+     * chart APIレスポンスから (タイムスタンプ秒, 終値) の列を取り出す。
+     * 指数なので生の close を使う。取得の再試行と末尾null行の補完は YahooChart に集約（v2.3.4）
+     */
+    private fun parseCloses(body: String): List<Pair<Long, Double>> =
+        YahooChart.parseCloses(body, preferAdj = false)
 
-    /** HTTP GET（タイムアウト付き。日本版 MarketFetcher と同じ方針） */
-    private fun httpGet(url: String): String {
-        val conn = URL(url).openConnection() as HttpURLConnection
-        conn.connectTimeout = 15000
-        conn.readTimeout = 15000
-        conn.setRequestProperty("User-Agent", UA)
-        try {
-            if (conn.responseCode != 200) {
-                throw IllegalStateException("HTTP ${conn.responseCode}: $url")
-            }
-            return conn.inputStream.bufferedReader(Charsets.UTF_8).readText()
-        } finally {
-            conn.disconnect()
-        }
-    }
-
-    /** chart APIレスポンスから (タイムスタンプ秒, 終値) の列を取り出す。null終値はスキップ */
-    private fun parseCloses(body: String): List<Pair<Long, Double>> {
-        val result = JSONObject(body).getJSONObject("chart")
-            .getJSONArray("result").getJSONObject(0)
-        val ts = result.optJSONArray("timestamp") ?: return emptyList()
-        val closes = result.getJSONObject("indicators")
-            .getJSONArray("quote").getJSONObject(0)
-            .optJSONArray("close") ?: return emptyList()
-        val out = ArrayList<Pair<Long, Double>>(ts.length())
-        for (i in 0 until ts.length()) {
-            val c = closes.optDouble(i)          // nullは NaN で返る
-            if (!c.isNaN() && c > 0) out.add(ts.getLong(i) to c)
-        }
-        return out
-    }
+    private fun httpGet(url: String): String = YahooChart.httpGet(url)
 
     /** 単一銘柄の直近終値（meta.regularMarketPrice。失敗したら null で続行） */
     private fun fetchLastPrice(url: String): Double? = try {

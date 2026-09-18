@@ -53,14 +53,14 @@ class DailyCheckWorker(
             // 通信失敗はリトライ（WorkManagerのバックオフに任せる。最大3回）
             if (runAttemptCount < 3) return Result.retry()
             // リトライを使い切った＝この日の取得は失敗確定。連続失敗を記録する
-            val (streak, counted) = recordFetchFailure(ctx)
+            val (streak, counted) = recordFetchFailure(ctx, reason = failReason(e))
             // 2日連続で失敗したら警告通知（同じ日に二重通知しないよう counted でガード）
             if (counted && streak >= FAIL_NOTIFY_THRESHOLD) {
                 NotificationHelper.notify(
                     ctx, NOTIF_ID_FETCH_FAIL,
                     "⚠️ 市場データの取得に失敗しています",
                     "市場データの取得に失敗しています（${streak}日連続）。" +
-                        "データ源の障害か形式変更の可能性"
+                        "データ源の障害か形式変更の可能性。理由: ${failReason(e)}"
                 )
             }
             return Result.failure()
@@ -234,13 +234,13 @@ class DailyCheckWorker(
             MarketFetcherUs.fetch()
         } catch (e: Exception) {
             // 失敗の可視化（日本側と同じ2日連続ルール。カウンタは別キーで独立）
-            val (streak, counted) = recordFetchFailure(ctx, US_FAIL_SUFFIX)
+            val (streak, counted) = recordFetchFailure(ctx, US_FAIL_SUFFIX, failReason(e))
             if (counted && streak >= FAIL_NOTIFY_THRESHOLD) {
                 NotificationHelper.notify(
                     ctx, NOTIF_ID_US_FETCH_FAIL,
                     "⚠️ 米国市場データの取得に失敗しています",
                     "米国市場データの取得に失敗しています（${streak}日連続）。" +
-                        "Yahoo Financeの障害か形式変更の可能性"
+                        "Yahoo Financeの障害か形式変更の可能性。理由: ${failReason(e)}"
                 )
             }
             return   // 米国失敗でも日本側の処理は続行する
@@ -368,13 +368,13 @@ class DailyCheckWorker(
         val tpx: TopixLadderStatus = try {
             TopixFetcher.fetch()
         } catch (e: Exception) {
-            val (streak, counted) = recordFetchFailure(ctx, TPX_FAIL_SUFFIX)
+            val (streak, counted) = recordFetchFailure(ctx, TPX_FAIL_SUFFIX, failReason(e))
             if (counted && streak >= FAIL_NOTIFY_THRESHOLD) {
                 NotificationHelper.notify(
                     ctx, NOTIF_ID_TPX_FETCH_FAIL,
                     "⚠️ 1306（TOPIX）データの取得に失敗しています",
                     "1306はしご用のデータ取得に失敗しています（${streak}日連続）。" +
-                        "Yahoo Financeの障害か形式変更の可能性"
+                        "Yahoo Financeの障害か形式変更の可能性。理由: ${failReason(e)}"
                 )
             }
             return   // TOPIX失敗でも他の処理は続行する
@@ -464,8 +464,13 @@ class DailyCheckWorker(
      * 同じ日に複数回失敗しても1日分としか数えない（日付でガード）。
      * suffix="" が日本市場、US_FAIL_SUFFIX が米国市場（カウンタは別持ち）
      */
-    private fun recordFetchFailure(ctx: Context, suffix: String = ""): Pair<Int, Boolean> {
+    private fun recordFetchFailure(
+        ctx: Context, suffix: String = "", reason: String = ""
+    ): Pair<Int, Boolean> {
         val prefs = ctx.getSharedPreferences(PREFS_HEALTH, Context.MODE_PRIVATE)
+        // 失敗理由は毎回上書きで残す（カウントを進めない同日2回目の失敗でも最新の理由が見える）。
+        // 取得に成功しても消さない＝「前回なぜ失敗したか」を後から run-as で読める
+        prefs.edit().putString(KEY_LAST_FAIL_REASON + suffix, "${LocalDate.now(ZoneId.of("Asia/Tokyo"))} $reason").apply()
         val today = LocalDate.now(ZoneId.of("Asia/Tokyo")).toString()
         val lastFailDate = prefs.getString(KEY_LAST_FAIL_DATE + suffix, null)
         var streak = prefs.getInt(KEY_FAIL_STREAK + suffix, 0)
@@ -498,6 +503,7 @@ class DailyCheckWorker(
         private const val PREFS_HEALTH = "panicpilot_health"       // 健全性チェック用Prefs
         private const val KEY_FAIL_STREAK = "fetch_fail_streak"    // 連続失敗日数
         private const val KEY_LAST_FAIL_DATE = "fetch_last_fail_date"  // 最後に失敗を数えた日
+        private const val KEY_LAST_FAIL_REASON = "fetch_last_fail_reason"  // 最後の失敗理由（日付つき。成功しても消さない）
         private const val FAIL_NOTIFY_THRESHOLD = 2                // この日数連続で失敗したら通知
         private const val NOTIF_ID_FETCH_FAIL = 6                  // 通知ID（1〜5はシグナル系で使用済み）
         private const val NOTIF_ID_LIGHTS_OFF = 7                  // 消灯通知の通知ID
@@ -522,6 +528,10 @@ class DailyCheckWorker(
         private const val NOTIF_ID_TPX_TIMEOUT = 205               // 60営業日タイムアウト
         private const val NOTIF_ID_TPX_RESET = 206                 // エピソード終了（回復）
         private const val NOTIF_ID_TPX_FETCH_FAIL = 207            // 取得失敗
+
+        /** 例外を通知・記録用の短い1行にする（長すぎると通知が読めないので200字で切る） */
+        fun failReason(e: Exception): String =
+            "${e.javaClass.simpleName}: ${e.message ?: "-"}".take(200)
 
         fun fmt(v: Double) = "%,.1f".format(v)
         fun fmtPct(v: Double) = "%+.1f%%".format(v * 100)

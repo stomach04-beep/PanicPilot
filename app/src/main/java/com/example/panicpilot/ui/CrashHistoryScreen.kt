@@ -155,8 +155,9 @@ private fun SummaryPage(episodes: List<CrashEpisode>) {
 
         Card(shape = RoundedCornerShape(14.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("このアプリの出口ルールで売った場合", fontWeight = FontWeight.SemiBold)
-                Text("（日経が52週高値-3%まで回復したら売却）",
+                // v2.3.5: -3%回復での売却は旧ルール。現行は「買ったら売らない」（検証50・57）
+                Text("旧・出口ルールで売った場合（参考）", fontWeight = FontWeight.SemiBold)
+                Text("（日経が52週高値-3%まで回復したら売却。現行は売らず、出口は撤退線のみ）",
                     style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 Spacer(Modifier.height(2.dp))
                 StatRow("成績", "${exits.count { it > 0 }}勝${exits.count { it <= 0 }}敗",
@@ -314,7 +315,7 @@ private fun EpisodePage(e: CrashEpisode, status: MarketStatus?) {
                 RetRow("12ヶ月後", e.g12m)
                 RetRow("いちばん深い含み損", e.maxDdG)
                 Spacer(Modifier.height(4.dp))
-                Text("出口ルールで売った場合", fontWeight = FontWeight.SemiBold)
+                Text("旧・出口ルールで売った場合（参考）", fontWeight = FontWeight.SemiBold)
                 if (e.exitRet == null) {
                     Text("まだ52週高値-3%まで回復していません（保有中）",
                         style = MaterialTheme.typography.bodySmall, color = Color.Gray)

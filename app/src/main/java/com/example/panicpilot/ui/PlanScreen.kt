@@ -154,7 +154,9 @@ private fun PlanBuilder(status: MarketStatus?, onStart: (Long) -> Unit) {
                 t?.let { "日経 %,.0f円 以下".format(it * 0.90) } ?: "")
             Text(
                 "※②③が60営業日以内に来なければ、その時点で残りを投入\n" +
-                "※出口: 日経平均が52週高値-3%以内に回復したら全売却（検証17: 8回全勝）\n" +
+                // v2.3.5: 旧「-3%回復で全売却（検証17）」は検証50・57で覆った。出口は撤退線のみ
+                "※出口: 買ったら売らない。52週高値-3%への回復は売却の合図ではなく" +
+                "撤退ロックの解除条件（検証50・57）\n" +
                 // 撤退ラインの基準は「現在値」ではなく「52週高値」。MarketStatus 側の計算を使う
                 "※撤退: 日経平均が52週高値-35%" +
                 (status?.let { "（%,.0f円）".format(it.retreatLine) } ?: "") +
@@ -207,14 +209,15 @@ private fun PositionTracker(
                 InfoLine("現在 日経平均", "%,.0f円（基準比 %+.1f%%）"
                     .format(it.indexLast, (it.indexLast / pos.baseIndex - 1) * 100))
                 // しきい値は MarketStatus 側の定義を参照する（0.97 等を直書きしない）
-                InfoLine("出口ライン（利確）", "%,.0f円（52週高値%.0f%%）"
+                // v2.3.5: -3%回復は売却の合図ではない（出口は撤退線のみ。検証50・57）
+                InfoLine("回復ライン（ロック解除）", "%,.0f円（52週高値%.0f%%）"
                     .format(it.exitLine, MarketStatus.TH_EXIT * 100))
-                InfoLine("撤退ライン（損切り）", "%,.0f円（52週高値%.0f%%）"
+                InfoLine("撤退ライン（唯一の出口）", "%,.0f円（52週高値%.0f%%）"
                     .format(it.retreatLine, MarketStatus.TH_RETREAT * 100))
                 if (it.recovered) {
-                    Text("🏁 出口シグナル点灯中！ 全売却のタイミングです",
-                        color = MaterialTheme.colorScheme.error,
-                        fontWeight = FontWeight.Bold)
+                    // 売りを促す赤字・太字はやめ、通常色の説明文にする
+                    Text("📈 高値圏まで回復しました。売却の合図ではありません（出口は撤退線のみ）",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (it.sigRetreat) {
                     Text("🛑 撤退シグナル点灯中！ 全売却して次の回復まで待機",

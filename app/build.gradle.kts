@@ -15,8 +15,8 @@ android {
         applicationId = "com.example.panicpilot"
         minSdk = 31
         targetSdk = 36
-        versionCode = 20
-        versionName = "2.3.4" // 2026-09-19: Yahoo取得に再試行3回＋末尾null行のmeta補完（YahooChartへ集約）・失敗理由を記録して通知文にも表示
+        versionCode = 21
+        versionName = "2.3.5" // 2026-09-21: 説明文を最新の検証へ（全勝・最も強い→検証72/167、出口-3%で全売却→売らない・出口は撤退線のみ＝検証50/57、点灯は上乗せの合図＝検証69）。挙動としきい値は不変
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

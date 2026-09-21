@@ -19,11 +19,17 @@ data class MarketStatus(
     // 推移タブ用に直近約1年（252営業日）の3指標の日次系列を保持
     val history: List<HistoryPoint> = emptyList()
 ) {
-    // ─── 点灯判定（J-Quants 10年バックテスト検証済みの3条件） ───
+    // ─── 点灯判定（初期の10年バックテスト＝検証1・2・18で決めた3条件） ───
     // しきい値は下の companion に一元化し、ここも推移画面も同じ定数を参照する（DRY）
-    val sigDd: Boolean get() = dd52w <= TH_DD          // 検証2: DD≤-15%（1M+4.5% 勝率89%）
-    val sigFast: Boolean get() = ret5d <= TH_FAST      // 検証18: 5日で-8%急落（3M/12M全勝）
-    val sigAdr: Boolean get() = adr25 < TH_ADR_DEEP    // 検証1: 騰落レシオ<70（全勝）
+    // ⚠ 当時の「勝率89%・全勝」は10年・比較相手なしの数字で、後の検証で覆っている:
+    //   ・5日-8%は61年では12M超過-7.73pt・プラセボ4.0%タイル＝10年上昇相場の産物（検証72）
+    //   ・アプリの形（-15% または 5日-8%）は2013年以降の超過-2.7pt。何もない日に買っても
+    //     12M中央値+13.3%で、勝率は相場の手柄だった（検証167）
+    //   ・点灯は待機の理由ではなく上乗せで買う合図（検証69）
+    // しきい値そのものは v2.3.5 では変えていない（入れ替えはユーザー判断待ち）
+    val sigDd: Boolean get() = dd52w <= TH_DD          // 52週高値-15%（検証2が出どころ。上の注意を参照）
+    val sigFast: Boolean get() = ret5d <= TH_FAST      // 5日で-8%急落（検証18が出どころ。検証72で61年は超過マイナス）
+    val sigAdr: Boolean get() = adr25 < TH_ADR_DEEP    // 騰落レシオ<70（検証1が出どころ。2016年以前のデータが無く61年は未測定）
     val sigShallow: Boolean get() = adr25 < TH_ADR_SHALLOW  // 浅い点灯（30-40日待って二番底）
     val deep: Boolean get() = sigDd || sigFast || sigAdr
 
@@ -31,8 +37,10 @@ data class MarketStatus(
     // 指数ベースで見るのがポイント。レバの含み損で切ると通常の暴落で狩られる（検証33）
     val sigRetreat: Boolean get() = dd52w <= TH_RETREAT   // 52週高値-35%割れ＝構造的弱気相場
     val retreatLine: Double get() = high52w * (1 + TH_RETREAT)  // 撤退する日経平均の水準
-    val exitLine: Double get() = high52w * (1 + TH_EXIT)        // 利確する日経平均の水準
-    val recovered: Boolean get() = dd52w >= TH_EXIT       // 52週高値-3%まで回復＝出口/ロック解除
+    // v2.3.5: -3%回復は「売却の合図」ではなく「撤退ロックの解除条件」。1458は買ったら売らず、
+    // 出口は撤退線のみ（検証50・57）。名前（exitLine/TH_EXIT）と判定ロジックは従来のまま
+    val exitLine: Double get() = high52w * (1 + TH_EXIT)        // 回復ライン（52週高値-3%）の日経平均の水準
+    val recovered: Boolean get() = dd52w >= TH_EXIT       // 52週高値-3%まで回復＝高値圏回復の通知/ロック解除
 
     // ─── 確信度（検証33）───
     // 日経VI≥30 が重なった点灯は買値が底に近く（底より+18.6%高い→+9.9%）12M成績も
@@ -72,7 +80,7 @@ data class MarketStatus(
         const val TH_ADR_SHALLOW = 80.0  // 25日騰落レシオ 注意ライン
 
         // 出口と撤退のライン（従来ここが直書きだったのを一元化）
-        const val TH_EXIT = -0.03        // 52週高値-3%まで回復＝利確／撤退ロック解除
+        const val TH_EXIT = -0.03        // 52週高値-3%まで回復＝撤退ロック解除（売却の合図ではない。検証50・57）
         const val TH_RETREAT = -0.35     // 52週高値-35%割れ＝撤退（損切り）
         const val TH_VI = 30.0           // 日経VI 確信度ライン（検証23・33）
 

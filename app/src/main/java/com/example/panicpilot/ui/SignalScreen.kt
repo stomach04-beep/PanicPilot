@@ -81,20 +81,32 @@ fun SignalScreen(
             }
         }
 
+        // v2.3.5: 点灯の位置づけ（検証69・167）。点灯待ちで資金を寝かせる設計は棄却済み
+        Text(
+            "点灯は資金を寝かせて待つ理由ではなく、上乗せで買う合図です（検証69）。" +
+                "過去10年の高い勝率は点灯条件ではなく上昇相場の手柄でした（検証167）。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
         // ─── シグナル3枚 ───
         SignalCard(
             title = "日経平均 52週高値からの下落",
             value = "%+.1f%%".format(status.dd52w * 100),
             threshold = "点灯: -15%以下",
             lit = status.sigDd,
-            note = "点灯後1M+4.5%勝率89%。初週が勝負、12M保有なら60日遅れも可"
+            // v2.3.5: 「1M+4.5%勝率89%」は10年・比較相手なしの数字だった（検証167で再監査）
+            note = "10年の「1M+4.5%・勝率89%」は比較相手なしの数字。2013年以降は何もない日に" +
+                "買っても12M中央値+13.3%で、点灯（-15%か5日-8%）の超過は-2.7pt（検証167）"
         )
         SignalCard(
             title = "日経平均 5日間リターン（急落検知）",
             value = "%+.1f%%".format(status.ret5d * 100),
             threshold = "点灯: -8%以下",
             lit = status.sigFast,
-            note = "5日-8%急落は3M・12Mとも全勝（検証18）。最も簡単で強いシグナル"
+            // v2.3.5: 「全勝・最も強い」は検証72で覆った（10年上昇相場の産物）
+            note = "10年では3M・12Mとも全勝に見えたが、61年では12M超過-7.73pt・" +
+                "プラセボ4.0%タイル＝10年上昇相場の産物だった（検証72）"
         )
         SignalCard(
             title = "25日騰落レシオ",
@@ -102,7 +114,9 @@ fun SignalScreen(
             threshold = "点灯: 70未満（80未満=注意）",
             lit = status.sigAdr,
             warn = status.sigShallow && !status.sigAdr,
-            note = "70割れは10年全勝。80割れは急がず二番底待ちが正解"
+            // v2.3.5: 「10年全勝」は比較相手なしの10年の数字（検証167）
+            note = "「70割れは10年全勝」も比較相手なしの10年の数字（検証167）。" +
+                "80割れは急がず二番底待ち（検証9）"
         )
 
         // 日経VIは点灯条件ではなく「確信度」の材料（検証33: 出動可否は変えず金額の厚みだけ）
@@ -125,7 +139,8 @@ fun SignalScreen(
                 InfoRow("日経平均", "%,.0f円".format(status.indexLast))
                 InfoRow("52週高値", "%,.0f円".format(status.high52w))
                 // しきい値は MarketStatus 側の計算を使う（0.97 を直書きしない）
-                InfoRow("出口ライン（高値-3%）", "%,.0f円".format(status.exitLine))
+                // v2.3.5: -3%回復は売却の合図ではなく撤退ロックの解除条件（検証50・57）
+                InfoRow("回復ライン（高値-3%・ロック解除）", "%,.0f円".format(status.exitLine))
                 InfoRow("撤退ライン（高値-35%）", "%,.0f円".format(status.retreatLine))
                 status.lev1458?.let { InfoRow("楽天日経レバ1458", "%,.0f円".format(it)) }
                 Spacer(Modifier.height(4.dp))

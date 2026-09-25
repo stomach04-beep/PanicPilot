@@ -17,8 +17,9 @@ import java.time.ZoneId
 
 /**
  * 1日1回（引け後）に市場データを取得して判定するWorker。
- * 通知は「同じデータ日付×同じ種類」で1回だけ（notifiedKeysで重複防止。
- * 初回取得で既に点灯している場合も通知する＝出動アプリなので望ましい動作）
+ * 点灯・買い増し・高値圏の通知は「その状態が続いている間は1回だけ」（v2.3.7〜・episode()）。
+ * 状態から外れて再び入ったらもう1回鳴る。消灯・撤退・ロック解除は「変わった日」だけ鳴る
+ * （notifiedKeysで重複防止。初回取得で既に点灯している場合も通知する＝出動アプリなので望ましい動作）
  *
  * 点灯だけでなく「消灯」（前回より点灯レベルが下がった日）も通知する。
  * 判定は保存した lastLevel（前回この Worker が見たレベル）との比較で行う。
@@ -149,71 +150,79 @@ class DailyCheckWorker(
         }
         val lockedOut = retreatedAt != null
 
-        if (status.deep) {
-            val reasons = buildList {
-                if (status.sigDd) add("52週高値から${fmtPct(status.dd52w)}")
-                if (status.sigFast) add("5日で${fmtPct(status.ret5d)}の急落")
-                if (status.sigAdr) add("騰落レシオ${"%.1f".format(status.adr25)}")
-            }.joinToString(" / ")
-            if (lockedOut) {
-                // 点灯しても出動しない。弱気相場の途中で買い増すと負けを重ねる（検証36）
-                fireOnce(
-                    "deep_locked", 1, "⛔ 点灯したが出動しません（撤退ロック中）",
-                    "$reasons。${retreatedAt}に撤退ライン割れ。" +
-                        "52週高値-3%（${fmt(status.exitLine)}円）まで回復するまで待機"
-                )
+        // ─── 点灯・買い増し・高値圏の通知（v2.3.7〜: 状態が続く間は1回だけ＝エピソード単位） ───
+        // 旧方式は「種類＋データ日付」だったので、点灯が続く間は毎営業日同じ通知が届いていた（LESSON-211）。
+        // 消灯・撤退・ロック解除は「変わった日」だけ鳴る作りなので従来の fireOnce のまま
+        val today = status.dataDate
+        val reasons = buildList {
+            if (status.sigDd) add("52週高値から${fmtPct(status.dd52w)}")
+            if (status.sigFast) add("5日で${fmtPct(status.ret5d)}の急落")
+            if (status.sigAdr) add("騰落レシオ${"%.1f".format(status.adr25)}")
+        }.joinToString(" / ")
+
+        // 点灯しても出動しない。弱気相場の途中で買い増すと負けを重ねる（検証36）
+        episode(notified, "deep_locked", status.deep && lockedOut, today) {
+            NotificationHelper.notify(
+                ctx, 1, "⛔ 点灯したが出動しません（撤退ロック中）",
+                "$reasons。${retreatedAt}に撤退ライン割れ。" +
+                    "52週高値-3%（${fmt(status.exitLine)}円）まで回復するまで待機"
+            )
+        }
+        episode(notified, "deep", status.deep && !lockedOut, today) {
+            // 確信度（日経VI）で「満額か半分か」まで通知本文に入れる（検証33）
+            val conf = if (status.viHigh) {
+                "日経VI${"%.1f".format(status.nikkeiVi)}＝確信度高。予算の満額で"
             } else {
-                // 確信度（日経VI）で「満額か半分か」まで通知本文に入れる（検証33）
-                val conf = if (status.viHigh) {
-                    "日経VI${"%.1f".format(status.nikkeiVi)}＝確信度高。予算の満額で"
-                } else {
-                    "確信度は標準。予算の半分に抑えて"
-                }
-                fireOnce(
-                    "deep", 1, "🚨 出動シグナル点灯",
-                    "$reasons。$conf、翌々日に1/3を1回目のエントリー（詳細はアプリで）"
-                )
+                "確信度は標準。予算の半分に抑えて"
             }
-        } else if (status.sigShallow) {
-            fireOnce(
-                "shallow", 2, "⚠ 浅い点灯（騰落レシオ<80）",
+            NotificationHelper.notify(
+                ctx, 1, "🚨 出動シグナル点灯",
+                "$reasons。$conf、翌々日に1/3を1回目のエントリー（詳細はアプリで）"
+            )
+        }
+        episode(notified, "shallow", !status.deep && status.sigShallow, today) {
+            NotificationHelper.notify(
+                ctx, 2, "⚠ 浅い点灯（騰落レシオ<80）",
                 "急がない。30〜40営業日待って二番底を確認してから（検証9）"
             )
         }
 
-        // ─── ポジション保有中: 買い増し・出口の通知 ───
-        if (pos != null) {
-            if (!pos.fill2Done && status.indexLast <= pos.trigger2) {
-                fireOnce(
-                    "fill2", 3, "📉 2回目の買い増し水準に到達",
-                    "日経平均 ${fmt(status.indexLast)}円 ≤ 基準-5%（${fmt(pos.trigger2)}円）。予算の1/3を追加投入"
-                )
-            }
-            if (!pos.fill3Done && status.indexLast <= pos.trigger3) {
-                fireOnce(
-                    "fill3", 4, "📉 3回目の買い増し水準に到達",
-                    "日経平均 ${fmt(status.indexLast)}円 ≤ 基準-10%（${fmt(pos.trigger3)}円）。残りの予算を投入"
-                )
-            }
-            // 高値圏回復: 52週高値-3%以内まで回復したことを知らせる。
-            // v2.3.5: 旧「全売却のタイミング（検証17: 8回全勝）」は10年・比較相手なしの結論で、
-            // 検証50・57で「売って現金に戻す」型が最大の損失源と分かった（1306はしごと同じ扱いに統一）。
-            // 通知キー "exit"・ID 5・recovered の判定は従来のまま（変えたのは文言だけ）
-            if (status.recovered) {
-                fireOnce(
-                    "exit", 5, "📈 高値圏まで回復（売却の合図ではありません）",
-                    "日経平均が52週高値-3%以内に回復＝撤退ロックの解除条件。" +
-                        "1458は買ったら売らず、出口は撤退線（52週高値-35%）のみ（検証50・57）"
-                )
-            }
+        // ─── ポジション保有中: 買い増し・高値圏の通知 ───
+        // 水準に達したときに1回。いったん水準より上に戻ってから再び達したら、もう1回
+        episode(notified, "fill2",
+            pos != null && !pos.fill2Done && status.indexLast <= pos.trigger2, today) {
+            NotificationHelper.notify(
+                ctx, 3, "📉 2回目の買い増し水準に到達",
+                "日経平均 ${fmt(status.indexLast)}円 ≤ 基準-5%（${fmt(pos!!.trigger2)}円）。予算の1/3を追加投入"
+            )
+        }
+        episode(notified, "fill3",
+            pos != null && !pos.fill3Done && status.indexLast <= pos.trigger3, today) {
+            NotificationHelper.notify(
+                ctx, 4, "📉 3回目の買い増し水準に到達",
+                "日経平均 ${fmt(status.indexLast)}円 ≤ 基準-10%（${fmt(pos!!.trigger3)}円）。残りの予算を投入"
+            )
+        }
+        // 高値圏回復: 52週高値-3%以内まで回復したことを知らせる。
+        // v2.3.5: 旧「全売却のタイミング（検証17: 8回全勝）」は10年・比較相手なしの結論で、
+        // 検証50・57で「売って現金に戻す」型が最大の損失源と分かった（1306はしごと同じ扱いに統一）。
+        // 1458は買ったら売らないので、高値圏に入ったときの1回だけで足りる
+        episode(notified, "exit", pos != null && status.recovered, today) {
+            NotificationHelper.notify(
+                ctx, 5, "📈 高値圏まで回復（売却の合図ではありません）",
+                "日経平均が52週高値-3%以内に回復＝撤退ロックの解除条件。" +
+                    "1458は買ったら売らず、出口は撤退線（52週高値-35%）のみ（検証50・57）"
+            )
         }
 
         // 通知キーの肥大防止: 30件を超えたら当日データ分だけ残す
         // （米国キーは日付が違うので、米国側の当日データ分も一緒に残す）
+        // エピソード中の印（"ep:"）は日付を持たないので必ず残す（消すと翌日また鳴る）
         val usDate = saved.usStatus?.dataDate
         val keep = if (notified.size <= 30) notified
                    else notified.filter {
-                       it.endsWith(status.dataDate) || (usDate != null && it.endsWith(usDate))
+                       it.startsWith("ep:") ||
+                           it.endsWith(status.dataDate) || (usDate != null && it.endsWith(usDate))
                    }.toMutableSet()
 
         // 今回のレベルを「前回値」として記録（次回の消灯判定の材料）＋撤退ロックの状態。
@@ -305,51 +314,52 @@ class DailyCheckWorker(
             )
         }
 
-        if (us.deep) {
-            val reasons = buildList {
-                if (us.sigDd) add("52週高値から${fmtPct(us.dd52w)}")
-                if (us.sigFast) add("5日で${fmtPct(us.ret5d)}の急落")
-            }.joinToString(" / ")
-            if (usRetreatedAt != null) {
-                fireOnce(
-                    "us_deep_locked", NOTIF_ID_US_LIT, "⛔ 米国：点灯したが出動しません（撤退ロック中）",
-                    "$reasons。${usRetreatedAt}に撤退ライン割れ。" +
-                        "52週高値-3%（${fmt(us.exitLine)}）まで回復するまで待機"
-                )
+        // ─── 点灯・買い増し・出口（v2.3.7〜: 状態が続く間は1回だけ＝エピソード単位。日本側と同じ） ───
+        val today = us.dataDate
+        val reasons = buildList {
+            if (us.sigDd) add("52週高値から${fmtPct(us.dd52w)}")
+            if (us.sigFast) add("5日で${fmtPct(us.ret5d)}の急落")
+        }.joinToString(" / ")
+        episode(notified, "us_deep_locked", us.deep && usRetreatedAt != null, today) {
+            NotificationHelper.notify(
+                ctx, NOTIF_ID_US_LIT, "⛔ 米国：点灯したが出動しません（撤退ロック中）",
+                "$reasons。${usRetreatedAt}に撤退ライン割れ。" +
+                    "52週高値-3%（${fmt(us.exitLine)}）まで回復するまで待機"
+            )
+        }
+        episode(notified, "us_deep", us.deep && usRetreatedAt == null, today) {
+            // 確信度（VIX）。検証46: VIX<30の点灯は2008年型の危険信号でもある＝半分に抑える
+            val conf = if (us.vixHigh) {
+                "VIX${"%.1f".format(us.vix)}＝確信度高。予算の満額で"
             } else {
-                // 確信度（VIX）。検証46: VIX<30の点灯は2008年型の危険信号でもある＝半分に抑える
-                val conf = if (us.vixHigh) {
-                    "VIX${"%.1f".format(us.vix)}＝確信度高。予算の満額で"
-                } else {
-                    "VIXが30未満＝確信度は標準。予算の半分に抑えて"
-                }
-                fireOnce(
-                    "us_deep", NOTIF_ID_US_LIT, "🚨 米国：出動シグナル点灯（S&P500）",
-                    "$reasons。$conf、SPXLを3分割で（詳細はアプリの米国タブで）"
-                )
+                "VIXが30未満＝確信度は標準。予算の半分に抑えて"
             }
+            NotificationHelper.notify(
+                ctx, NOTIF_ID_US_LIT, "🚨 米国：出動シグナル点灯（S&P500）",
+                "$reasons。$conf、SPXLを3分割で（詳細はアプリの米国タブで）"
+            )
         }
 
         // ─── ポジション保有中: 買い増し・出口 ───
-        if (pos != null) {
-            if (!pos.fill2Done && us.indexLast <= pos.trigger2) {
-                fireOnce(
-                    "us_fill2", NOTIF_ID_US_FILL2, "📉 米国：2回目の買い増し水準に到達",
-                    "S&P500 ${fmt(us.indexLast)} ≤ 基準-5%（${fmt(pos.trigger2)}）。予算の1/3を追加投入"
-                )
-            }
-            if (!pos.fill3Done && us.indexLast <= pos.trigger3) {
-                fireOnce(
-                    "us_fill3", NOTIF_ID_US_FILL3, "📉 米国：3回目の買い増し水準に到達",
-                    "S&P500 ${fmt(us.indexLast)} ≤ 基準-10%（${fmt(pos.trigger3)}）。残りの予算を投入"
-                )
-            }
-            if (us.recovered) {
-                fireOnce(
-                    "us_exit", NOTIF_ID_US_EXIT, "🏁 米国：出口シグナル（高値圏まで回復）",
-                    "S&P500が52週高値-3%以内に回復。SPXL全売却のタイミング"
-                )
-            }
+        episode(notified, "us_fill2",
+            pos != null && !pos.fill2Done && us.indexLast <= pos.trigger2, today) {
+            NotificationHelper.notify(
+                ctx, NOTIF_ID_US_FILL2, "📉 米国：2回目の買い増し水準に到達",
+                "S&P500 ${fmt(us.indexLast)} ≤ 基準-5%（${fmt(pos!!.trigger2)}）。予算の1/3を追加投入"
+            )
+        }
+        episode(notified, "us_fill3",
+            pos != null && !pos.fill3Done && us.indexLast <= pos.trigger3, today) {
+            NotificationHelper.notify(
+                ctx, NOTIF_ID_US_FILL3, "📉 米国：3回目の買い増し水準に到達",
+                "S&P500 ${fmt(us.indexLast)} ≤ 基準-10%（${fmt(pos!!.trigger3)}）。残りの予算を投入"
+            )
+        }
+        episode(notified, "us_exit", pos != null && us.recovered, today) {
+            NotificationHelper.notify(
+                ctx, NOTIF_ID_US_EXIT, "🏁 米国：出口シグナル（高値圏まで回復）",
+                "S&P500が52週高値-3%以内に回復。SPXL全売却のタイミング"
+            )
         }
 
         // 米国分だけを保存（日本側フィールドは読み込んだ値をそのまま持ち越す）
@@ -511,6 +521,12 @@ class DailyCheckWorker(
         }
         NotificationManagerCompat.from(ctx).cancel(failNotifId)
     }
+
+    /** 「状態が続いている間は1回だけ」通知する。判定本体は EpisodeNotifier（単体テストあり）に1か所だけ置く */
+    private fun episode(
+        notified: MutableSet<String>, key: String, active: Boolean, today: String,
+        fire: () -> Unit
+    ) = EpisodeNotifier.episode(notified, key, active, today, fire)
 
     companion object {
         // 取得失敗の可視化まわり

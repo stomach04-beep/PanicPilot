@@ -1,7 +1,11 @@
 package com.example.panicpilot.data
 
 import android.content.Context
+import android.util.Log
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -161,7 +165,24 @@ object Storage {
                   tpxStatus, tpxNotified, tpxLastClockStart,
                   goldStatus, goldPlan)
         } catch (e: Exception) {
-            Saved(null, null, emptySet(), null, emptySet())   // 壊れていたら初期状態から
+            // ファイルはあるのに読めない＝壊れている。初期状態で返すと次の save で
+            // ポジション・撤退ロック・金プランが空データに上書きされて消えるため、
+            // 先に壊れたファイルを別名へ退避して元データを残す（LESSON-72）
+            quarantineCorrupt(f, e)
+            Saved(null, null, emptySet(), null, emptySet())   // 退避したうえで初期状態から
+        }
+    }
+
+    /** 壊れた保存ファイルを「元の名前.corrupt-yyyyMMddHHmmss」へ改名して退避する（改名できなければコピー） */
+    private fun quarantineCorrupt(f: File, e: Exception) {
+        try {
+            val stamp = SimpleDateFormat("yyyyMMddHHmmss", Locale.US).format(Date())
+            val dst = File(f.parentFile, "${f.name}.corrupt-$stamp")
+            if (!f.renameTo(dst)) f.copyTo(dst, overwrite = true)
+            Log.w("Storage", "保存ファイルが読めないため ${dst.name} へ退避しました", e)
+        } catch (ex: Exception) {
+            // 退避自体に失敗しても読み込みは続ける（アプリを落とさない）
+            Log.w("Storage", "壊れた保存ファイルの退避に失敗しました", ex)
         }
     }
 

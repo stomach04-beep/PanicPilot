@@ -1,6 +1,7 @@
 package com.example.panicpilot
 
 import android.content.Context
+import androidx.core.app.NotificationManagerCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.panicpilot.data.LitLevel
@@ -501,6 +502,14 @@ class DailyCheckWorker(
                 .remove(KEY_LAST_FAIL_DATE + suffix)
                 .apply()
         }
+        // 取得が戻ったので、出ていた「取得失敗」通知を通知欄から消す（LESSON-190）。
+        // 市場ごとに通知IDが別なので、接尾辞から対応するIDを選ぶ
+        val failNotifId = when (suffix) {
+            US_FAIL_SUFFIX -> NOTIF_ID_US_FETCH_FAIL
+            TPX_FAIL_SUFFIX -> NOTIF_ID_TPX_FETCH_FAIL
+            else -> NOTIF_ID_FETCH_FAIL
+        }
+        NotificationManagerCompat.from(ctx).cancel(failNotifId)
     }
 
     companion object {

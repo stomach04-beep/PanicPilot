@@ -18,9 +18,12 @@ import org.json.JSONObject
  */
 object MarketFetcher {
 
-    private const val DAILY_URL =
-        "https://nikkei225jp.com/_data/_nfsDATA/DAY/daily2year.json"
-    private const val REFERER = "https://nikkei225jp.com/data/karauri.php"
+    // v2.3.8(2026-10-05): 2026-10-04 にサイト側が置き場所を …/_nfsDATA/DAY/ → …/_nfsDATA/data_DAY/ へ変え、
+    // 決め打ちのURLが404になって取得が止まった。ここは「控え」で、404のときは参照元ページ(REFERER)の
+    // <script src="…daily2year.json?数字"> からファイル名で置き場所を探して取り直す（fetchDailyBody）
+    internal const val DAILY_URL =
+        "https://nikkei225jp.com/_data/_nfsDATA/data_DAY/daily2year.json"
+    internal const val REFERER = "https://nikkei225jp.com/data/karauri.php"
     private const val UA =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
     private const val YAHOO_1458_URL =
@@ -35,12 +38,96 @@ object MarketFetcher {
         referer?.let { conn.setRequestProperty("Referer", it) }
         try {
             if (conn.responseCode != 200) {
-                throw IllegalStateException("HTTP ${conn.responseCode}: $url")
+                throw HttpStatusException(conn.responseCode, url)
             }
             return conn.inputStream.bufferedReader(Charsets.UTF_8).readText()
         } finally {
             conn.disconnect()
         }
+    }
+
+    /** HTTPのステータスが200以外だったときの例外（404かどうかを呼び出し側で見分けるため） */
+    class HttpStatusException(val code: Int, url: String) : IllegalStateException("HTTP $code: $url")
+
+    /**
+     * 参照元ページのHTMLから、控えURLと同じファイル名を指す <script src="…"> を探して
+     * 絶対URLで返す【純粋関数・テスト対象】。見つからなければ null。
+     *
+     * 約250KBのHTMLを量指定子つき正規表現で舐めると Android で StackOverflowError になる
+     * 恐れがあるため、indexOf / lastIndexOf / substring だけで切り出す（RULE-71）。
+     * src に付いている「?497541」のようなキャッシュ避けの番号は捨てる。
+     * 安全弁として、参照元ページと別のホストを指す src は採らない。
+     * （BargainChecker の MarketDataFetcher.discoverDataUrl と同じ処理）
+     */
+    fun discoverDataUrl(pageHtml: String, fallbackUrl: String, pageUrl: String): String? {
+        val filename = fallbackUrl.substringAfterLast('/')
+        if (filename.isEmpty()) return null
+        var from = 0
+        while (true) {
+            val idx = pageHtml.indexOf(filename, from)
+            if (idx < 0) return null
+            val end = idx + filename.length
+            from = end
+            // ファイル名の直前は '/'、直後は閉じ引用符か '?'（キャッシュ避けの番号）であること
+            if (idx == 0 || pageHtml[idx - 1] != '/') continue
+            val after = pageHtml.getOrNull(end) ?: continue
+            if (after != '"' && after != '\'' && after != '?') continue
+            // <script …> の開始タグの中にあること（タグが閉じた後の本文は対象外）
+            val tagStart = pageHtml.lastIndexOf('<', idx)
+            if (tagStart < 0 || !pageHtml.startsWith("<script", tagStart, ignoreCase = true)) continue
+            val tagClose = pageHtml.indexOf('>', tagStart)
+            if (tagClose in 0 until idx) continue
+            // src="…" の開き引用符を探し、その直前が「空白＋src=」であること
+            val quote = maxOf(pageHtml.lastIndexOf('"', idx), pageHtml.lastIndexOf('\'', idx))
+            if (quote <= tagStart) continue
+            val head = pageHtml.substring(tagStart, quote).trimEnd()
+            if (!head.endsWith("=")) continue
+            val attr = head.dropLast(1).trimEnd()
+            if (!attr.endsWith("src", ignoreCase = true)) continue
+            val beforeAttr = attr.getOrNull(attr.length - 4)
+            if (beforeAttr == null || !beforeAttr.isWhitespace()) continue
+            // 相対パス（/_data/…）を参照元ページ基準の絶対URLに直す
+            val path = pageHtml.substring(quote + 1, end)
+            val resolved = try {
+                val base = java.net.URI(pageUrl)
+                val uri = base.resolve(path)
+                if (uri.host == null || !uri.host.equals(base.host, ignoreCase = true)) null
+                else uri.toString()
+            } catch (e: Exception) {
+                null
+            }
+            if (resolved != null) return resolved
+        }
+    }
+
+    /**
+     * daily2year.json の本文を取る【通信を差し替えてテスト可能】。
+     * 控えURLが404のときだけ、参照元ページから置き場所を探して取り直す。
+     * 404以外の失敗（混雑・一時エラー）では探し直さない（「そこに無い」のではないため）。
+     * 探し直しても見つからなければ、最初の404の例外をそのまま投げる。
+     *
+     * @param getter 1回のHTTP取得（url, referer）。200以外は HttpStatusException を投げる
+     * @param onMoved 置き場所の変更を見つけたときに新しいURLを知らせる（ログ用）
+     */
+    internal fun fetchDailyBody(
+        url: String = DAILY_URL,
+        getter: (String, String?) -> String = ::httpGet,
+        onMoved: (String) -> Unit = { found ->
+            android.util.Log.w(
+                "MarketFetcher",
+                "daily2year.json の置き場所の変更を検知: $url → $found（控えのURLを直すこと）"
+            )
+        }
+    ): String = try {
+        getter(url, REFERER)
+    } catch (e: HttpStatusException) {
+        if (e.code != 404) throw e
+        // 参照元ページ自体が取れないときは、原因である最初の404を報告する
+        val page = try { getter(REFERER, null) } catch (pageError: Exception) { throw e }
+        val found = discoverDataUrl(page, url, REFERER)
+        if (found == null || found == url) throw e
+        onMoved(found)
+        getter(found, REFERER)
     }
 
     /**
@@ -49,7 +136,7 @@ object MarketFetcher {
      * 改行・空白が混ざるので除去してから indexOf でパース（正規表現は使わない）
      */
     fun fetch(): MarketStatus {
-        val body = httpGet(DAILY_URL, REFERER)
+        val body = fetchDailyBody()
         // 改行・空白を除去して「[[行],[行]]」の形に正規化
         val compact = buildString(body.length) {
             for (c in body) if (c != '\n' && c != '\r' && c != ' ' && c != '\t') append(c)

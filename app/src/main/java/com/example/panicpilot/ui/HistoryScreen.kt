@@ -30,8 +30,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.activity.ComponentActivity
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import com.example.panicpilot.BatteryExemption
 import com.example.panicpilot.DailyCheckWorker
 import com.example.panicpilot.TestNotifyWorker
 import com.example.panicpilot.data.NotifLog
@@ -54,15 +59,58 @@ fun HistoryScreen() {
         entries = withContext(Dispatchers.IO) { NotifLog.load(context) }
     }
 
+    // 電池最適化の除外状態。システムのダイアログから戻ってきたとき（ON_RESUME）に読み直す
+    var resumeTick by remember { mutableIntStateOf(0) }
+    val activity = remember(context) { findActivity(context) }
+    DisposableEffect(activity) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) resumeTick++
+        }
+        activity?.lifecycle?.addObserver(observer)
+        onDispose { activity?.lifecycle?.removeObserver(observer) }
+    }
+    val exempted = remember(resumeTick) { BatteryExemption.isExempted(context) }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // ─── 停止状態テストの案内カード ───
+        // ─── 電池最適化の除外（v2.3.9） ───
+        // 未除外だと端末が裏での通信を止め、16:30 の日次チェックが遅れたり起動しなかったりする
+        // （2026-10-15 時点で待機バケット RARE より厳しい RESTRICTED だった）。状態を毎回ここに出す
         item {
             Spacer(Modifier.height(6.dp))
+            Card(shape = RoundedCornerShape(14.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("電池最適化の除外", fontWeight = FontWeight.SemiBold)
+                    if (exempted) {
+                        Text(
+                            "✅ 除外済みです。アプリを開かなくても毎日16:30ごろに判定が走ります。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    } else {
+                        Text(
+                            "⚠ 未除外です。このままでは端末が裏での通信を止め、毎日の判定が遅れたり" +
+                                "走らなかったりします（点灯や買い増しの通知が届かない）。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Button(
+                            onClick = { BatteryExemption.request(context) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("電池最適化から除外する")
+                        }
+                    }
+                }
+            }
+        }
+
+        // ─── 停止状態テストの案内カード ───
+        item {
             Card(shape = RoundedCornerShape(14.dp)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("アプリを閉じても届くかテスト", fontWeight = FontWeight.SemiBold)
@@ -168,6 +216,16 @@ fun HistoryScreen() {
 
         item { Spacer(Modifier.height(12.dp)) }
     }
+}
+
+/** Compose の context から Activity を探す（画面復帰の ON_RESUME を受け取るため） */
+private fun findActivity(context: android.content.Context): ComponentActivity? {
+    var c = context
+    while (c is android.content.ContextWrapper) {
+        if (c is ComponentActivity) return c
+        c = c.baseContext
+    }
+    return null
 }
 
 /** 履歴1件分のカード */

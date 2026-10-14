@@ -62,7 +62,8 @@ class DailyCheckWorker(
                     ctx, NOTIF_ID_FETCH_FAIL,
                     "⚠️ 市場データの取得に失敗しています",
                     "市場データの取得に失敗しています（${streak}日連続）。" +
-                        "データ源の障害か形式変更の可能性。理由: ${failReason(e)}"
+                        "データ源の障害か形式変更の可能性。理由: ${failReason(e)}" +
+                        BatteryExemption.failureHint(BatteryExemption.isExempted(ctx))
                 )
             }
             return Result.failure()
@@ -255,7 +256,8 @@ class DailyCheckWorker(
                     ctx, NOTIF_ID_US_FETCH_FAIL,
                     "⚠️ 米国市場データの取得に失敗しています",
                     "米国市場データの取得に失敗しています（${streak}日連続）。" +
-                        "Yahoo Financeの障害か形式変更の可能性。理由: ${failReason(e)}"
+                        "Yahoo Financeの障害か形式変更の可能性。理由: ${failReason(e)}" +
+                        BatteryExemption.failureHint(BatteryExemption.isExempted(ctx))
                 )
             }
             return   // 米国失敗でも日本側の処理は続行する
@@ -390,7 +392,8 @@ class DailyCheckWorker(
                     ctx, NOTIF_ID_TPX_FETCH_FAIL,
                     "⚠️ 1306（TOPIX）データの取得に失敗しています",
                     "1306はしご用のデータ取得に失敗しています（${streak}日連続）。" +
-                        "Yahoo Financeの障害か形式変更の可能性。理由: ${failReason(e)}"
+                        "Yahoo Financeの障害か形式変更の可能性。理由: ${failReason(e)}" +
+                        BatteryExemption.failureHint(BatteryExemption.isExempted(ctx))
                 )
             }
             return   // TOPIX失敗でも他の処理は続行する

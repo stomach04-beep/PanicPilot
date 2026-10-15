@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- 端末再起動後に日次チェックWorkを再登録する -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- 電池最適化の除外ダイアログを直接出す（v2.3.9。未除外だと裏での通信を止められ日次チェックが遅れる・起動しない） -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:name=".PanicPilotApp"

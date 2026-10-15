@@ -3,9 +3,7 @@ package com.example.panicpilot
 import android.app.Application
 import android.content.Context
 import androidx.work.BackoffPolicy
-import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import java.util.Calendar
@@ -50,13 +48,13 @@ class PanicPilotApp : Application() {
             }
             val initialDelayMin = (next.timeInMillis - now.timeInMillis) / 60000
 
+            // 通信の条件（NetworkType.CONNECTED）は付けない（v2.3.9）。
+            // 電池最適化を除外していないと Android が裏での通信を止め、そのあいだ「通信できる」の
+            // 条件が満たされないため、日次チェックそのものが起動しなくなる。起動しないと取得失敗の
+            // 連続日数も増えず「取得に失敗しています」の通知も出ない（兄弟アプリ PnlSentiment が
+            // 13日間黙っていた・LESSON-262）。条件を外せば通信できなくても走り、失敗を数えて知らせられる
             val request = PeriodicWorkRequestBuilder<DailyCheckWorker>(24, TimeUnit.HOURS)
                 .setInitialDelay(initialDelayMin, TimeUnit.MINUTES)
-                .setConstraints(
-                    Constraints.Builder()
-                        .setRequiredNetworkType(NetworkType.CONNECTED)
-                        .build()
-                )
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.MINUTES)
                 .build()
 
@@ -70,7 +68,8 @@ class PanicPilotApp : Application() {
             // 予定時刻が変わったときだけUPDATE、同じならKEEP＝既存の登録に触らない。
             val prefs = context.applicationContext
                 .getSharedPreferences(SCHEDULE_PREFS, Context.MODE_PRIVATE)
-            val signature = "16:30/24h"   // 予定の内容。変えたらここも変える
+            // 予定の内容。変えたらここも変える（v2.3.9 で通信の条件を外したので "/nonet" を足した＝1回だけUPDATE）
+            val signature = "16:30/24h/nonet"
             val changed = prefs.getString(KEY_SCHEDULED_SIGNATURE, null) != signature
 
             WorkManager.getInstance(context.applicationContext).enqueueUniquePeriodicWork(

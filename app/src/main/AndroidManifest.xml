@@ -11,6 +11,9 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- 電池最適化の除外ダイアログを直接出す（v2.3.9。未除外だと裏での通信を止められ日次チェックが遅れる・起動しない） -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- 毎日16:30の日次チェックを正確に鳴らす（v2.3.10。EtfBuyAlert と同じく両方を宣言） -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
     <application
         android:name=".PanicPilotApp"
@@ -40,8 +43,14 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
             </intent-filter>
         </receiver>
+
+        <!-- 毎日16:30のアラームの受け口（v2.3.10）。アプリ内からしか呼ばないので外部に公開しない -->
+        <receiver
+            android:name=".DailyAlarmReceiver"
+            android:exported="false" />
 
     </application>
 </manifest>

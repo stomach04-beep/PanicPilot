@@ -79,6 +79,11 @@ class PanicPilotApp : Application() {
                 request
             )
             if (changed) prefs.edit().putString(KEY_SCHEDULED_SIGNATURE, signature).apply()
+
+            // 本命は毎日 16:30 のアラーム（v2.3.10）。上の24時間周期は前回の実行から数えるので
+            // 遅れが翌日へ持ち越されていく（10-14 18:01 → 10-15 19:30）。こちらは保険として残す。
+            // アラームは同じ要求コードで掛け直すだけなので、毎回呼んでも実行中の仕事を中断しない
+            DailyAlarm.schedule(context.applicationContext)
         }
     }
 }

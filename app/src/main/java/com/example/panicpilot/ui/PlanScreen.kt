@@ -53,7 +53,7 @@ fun PlanScreen(
     ) {
         if (retreatedAt != null) RetreatLockBanner(status, retreatedAt)
         if (position == null) {
-            PlanBuilder(status, onStart)
+            PlanBuilder(status, onStart, locked = retreatedAt != null)
         } else {
             PositionTracker(status, position, onFill2, onFill3, onClose)
         }
@@ -83,7 +83,11 @@ private fun RetreatLockBanner(status: MarketStatus?, retreatedAt: String) {
 
 /** 出動前: 予算入力 → 計画表示 */
 @Composable
-private fun PlanBuilder(status: MarketStatus?, onStart: (Long) -> Unit) {
+private fun PlanBuilder(
+    status: MarketStatus?,
+    onStart: (Long) -> Unit,
+    locked: Boolean = false   // 撤退ロック中は出動を記録させない（v2.3.11）
+) {
     var budgetMan by rememberSaveable { mutableStateOf("100") }   // 万円
     val budgetYen = (budgetMan.toLongOrNull() ?: 0L) * 10000L
     // 確信度（日経VI）で実際に出す金額を調整する。出動の可否は変えない（検証33・標本が小さいため）
@@ -149,9 +153,9 @@ private fun PlanBuilder(status: MarketStatus?, onStart: (Long) -> Unit) {
             StepRow("① いま（点灯の翌々日）", yen(tranche),
                 t?.let { "日経 %,.0f円".format(it) } ?: "")
             StepRow("② 日経が基準-5%まで下落", yen(tranche),
-                t?.let { "日経 %,.0f円 以下".format(it * 0.95) } ?: "")
+                t?.let { "日経 %,.0f円 以下".format(it * Position.FILL2_RATIO) } ?: "")
             StepRow("③ 日経が基準-10%まで下落", yen(tranche),
-                t?.let { "日経 %,.0f円 以下".format(it * 0.90) } ?: "")
+                t?.let { "日経 %,.0f円 以下".format(it * Position.FILL3_RATIO) } ?: "")
             Text(
                 "※②③が60営業日以内に来なければ、その時点で残りを投入\n" +
                 // v2.3.5: 旧「-3%回復で全売却（検証17）」は検証50・57で覆った。出口は撤退線のみ
@@ -178,7 +182,7 @@ private fun PlanBuilder(status: MarketStatus?, onStart: (Long) -> Unit) {
     Button(
         // 記録するのは「実際に出す額」（確信度で絞った後の額）。予算そのものではない
         onClick = { if (deployYen > 0) onStart(deployYen) },
-        enabled = deployYen > 0 && status != null,
+        enabled = deployYen > 0 && status != null && !locked,
         modifier = Modifier.fillMaxWidth()
     ) { Text("① を実行した — 出動を記録する") }
 

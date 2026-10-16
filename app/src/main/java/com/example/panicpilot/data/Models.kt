@@ -131,7 +131,13 @@ data class Position(
     val fill2Done: Boolean = false,   // 2回目（-5%）投入済みか
     val fill3Done: Boolean = false    // 3回目（-10%）投入済みか
 ) {
-    val trigger2: Double get() = baseIndex * 0.95   // 2回目の買い増し水準
-    val trigger3: Double get() = baseIndex * 0.90   // 3回目の買い増し水準
+    val trigger2: Double get() = baseIndex * FILL2_RATIO   // 2回目の買い増し水準
+    val trigger3: Double get() = baseIndex * FILL3_RATIO   // 3回目の買い増し水準
     val trancheYen: Long get() = budgetYen / 3      // 1回あたりの投入額
+
+    companion object {
+        // 買い増し水準の比率（基準の-5%・-10%）。計画画面の案内もここを参照する（v2.3.11 で二重定義を解消）
+        const val FILL2_RATIO = 0.95
+        const val FILL3_RATIO = 0.90
+    }
 }

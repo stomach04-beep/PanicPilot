@@ -65,7 +65,8 @@ fun SignalScreen(
             )
             status.deep -> Triple(
                 "🚨 出動", FireRed,
-                "深い点灯。翌々日に予算の1/3で1回目。出動ナビタブで計画を作成"
+                // v2.3.12: 「翌々日」は初期BT（v1.1）の名残。検証25以降と過去局面タブは「点灯の翌営業日に買い」
+                "深い点灯。翌営業日に予算の1/3で1回目。出動ナビタブで計画を作成"
             )
             status.sigShallow -> Triple(
                 "⏳ 二番底待ち", WarnAmber,

@@ -178,7 +178,7 @@ class DailyCheckWorker(
             }
             NotificationHelper.notify(
                 ctx, 1, "🚨 出動シグナル点灯",
-                "$reasons。$conf、翌々日に1/3を1回目のエントリー（詳細はアプリで）"
+                "$reasons。$conf、翌営業日に1/3を1回目のエントリー（詳細はアプリで）"
             )
         }
         episode(notified, "shallow", !status.deep && status.sigShallow, today) {

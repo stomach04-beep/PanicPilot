@@ -150,7 +150,7 @@ private fun PlanBuilder(
                 )
             }
             val t = status?.indexLast
-            StepRow("① いま（点灯の翌々日）", yen(tranche),
+            StepRow("① いま（点灯の翌営業日）", yen(tranche),
                 t?.let { "日経 %,.0f円".format(it) } ?: "")
             StepRow("② 日経が基準-5%まで下落", yen(tranche),
                 t?.let { "日経 %,.0f円 以下".format(it * Position.FILL2_RATIO) } ?: "")

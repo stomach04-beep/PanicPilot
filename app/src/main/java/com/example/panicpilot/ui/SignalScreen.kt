@@ -37,7 +37,8 @@ private val GoGreen = Color(0xFF3D9C5A)
 fun SignalScreen(
     status: MarketStatus?,
     lastError: String?,
-    tpx: TopixLadderStatus? = null   // 1306はしご（v2.2。日経レバ用シグナルとは別枠）
+    tpx: TopixLadderStatus? = null,  // 1306はしご（v2.2。日経レバ用シグナルとは別枠）
+    retreatedAt: String? = null      // 撤退ライン割れの日。null でなければ出動ロック中（v2.3.11）
 ) {
     Column(
         modifier = Modifier
@@ -57,6 +58,11 @@ fun SignalScreen(
 
         // ─── 総合判定バナー ───
         val (label, color, advice) = when {
+            // v2.3.11: ロック中は「出動」と出さない（通知は「⛔出動しません」なのに画面だけ出動と言っていた。米国画面と同じ並び）
+            retreatedAt != null && status.deep -> Triple(
+                "⛔ 点灯中だが出動禁止", FireRed,
+                "撤退ロック中（${retreatedAt}に撤退ライン割れ）。52週高値-3%まで回復するまで新規出動しない"
+            )
             status.deep -> Triple(
                 "🚨 出動", FireRed,
                 "深い点灯。翌々日に予算の1/3で1回目。出動ナビタブで計画を作成"

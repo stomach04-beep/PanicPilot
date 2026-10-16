@@ -104,4 +104,31 @@ class YahooChartTest {
             assertEquals(3, Regex("HTTP 429").findAll(e.message!!).count())
         }
     }
+
+    // ─── v2.3.11: 取引中の途中値の足を落とす（completedBars） ───
+    // 09-18 の取引時間 = 1789689600（09:00 JST）〜 1789712100（15:15 JST）とする
+    private val rowsWithToday = listOf(1789603200L to 427.4, 1789689600L to 426.0)
+    private val start = 1789689600L
+    private val end = 1789712100L
+
+    /** 取引中（11:00 JST）は当日の足を落とし、前日の確定値で終わる */
+    @Test
+    fun 取引中は当日の途中値の足を落とす() {
+        val kept = YahooChart.completedBars(rowsWithToday, start, end, nowSec = start + 2 * 3600)
+        assertEquals(listOf(1789603200L to 427.4), kept)
+    }
+
+    /** 引け後（16:30 JST＝引け＋15分より後）は当日の足を残す */
+    @Test
+    fun 引け後は当日の足を残す() {
+        val kept = YahooChart.completedBars(rowsWithToday, start, end, nowSec = end + 75 * 60)
+        assertEquals(rowsWithToday, kept)
+    }
+
+    /** 取引時間が読めないときは判定できないので何も落とさない */
+    @Test
+    fun 取引時間が無ければ落とさない() {
+        val kept = YahooChart.completedBars(rowsWithToday, null, null, nowSec = start + 3600)
+        assertEquals(rowsWithToday, kept)
+    }
 }

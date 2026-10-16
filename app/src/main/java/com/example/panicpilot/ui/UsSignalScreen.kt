@@ -178,7 +178,7 @@ fun UsPlanScreen(
     ) {
         if (retreatedAt != null) UsRetreatLockBanner(status, retreatedAt)
         if (position == null) {
-            UsPlanBuilder(status, onStart)
+            UsPlanBuilder(status, onStart, locked = retreatedAt != null)
         } else {
             UsPositionTracker(status, position, onFill2, onFill3, onClose)
         }
@@ -207,7 +207,11 @@ private fun UsRetreatLockBanner(status: UsMarketStatus?, retreatedAt: String) {
 
 /** 出動前: 予算入力 → SPXL 3分割計画 */
 @Composable
-private fun UsPlanBuilder(status: UsMarketStatus?, onStart: (Long) -> Unit) {
+private fun UsPlanBuilder(
+    status: UsMarketStatus?,
+    onStart: (Long) -> Unit,
+    locked: Boolean = false   // 撤退ロック中は出動を記録させない（v2.3.11）
+) {
     var budgetMan by rememberSaveable { mutableStateOf("50") }   // 万円（3倍レバなので既定は控えめ）
     val budgetYen = (budgetMan.toLongOrNull() ?: 0L) * 10000L
     // 確信度（VIX）で実際に出す金額を調整（検証46: VIX<30は2008年型の危険信号でもある）
@@ -267,9 +271,9 @@ private fun UsPlanBuilder(status: UsMarketStatus?, onStart: (Long) -> Unit) {
             UsStepRow("① いま（点灯通知の当日夜の寄り）", usYen(tranche),
                 t?.let { "S&P500 %,.0f".format(it) } ?: "")
             UsStepRow("② S&P500が基準-5%まで下落", usYen(tranche),
-                t?.let { "S&P500 %,.0f 以下".format(it * 0.95) } ?: "")
+                t?.let { "S&P500 %,.0f 以下".format(it * Position.FILL2_RATIO) } ?: "")
             UsStepRow("③ S&P500が基準-10%まで下落", usYen(tranche),
-                t?.let { "S&P500 %,.0f 以下".format(it * 0.90) } ?: "")
+                t?.let { "S&P500 %,.0f 以下".format(it * Position.FILL3_RATIO) } ?: "")
             Text(
                 "※②③が60営業日以内に来なければ、その時点で残りを投入\n" +
                 "※出口: S&P500が52週高値-3%以内に回復したら全売却\n" +
@@ -296,7 +300,7 @@ private fun UsPlanBuilder(status: UsMarketStatus?, onStart: (Long) -> Unit) {
     Button(
         // 記録するのは「実際に出す額」（確信度で絞った後の額）
         onClick = { if (deployYen > 0) onStart(deployYen) },
-        enabled = deployYen > 0 && status != null,
+        enabled = deployYen > 0 && status != null && !locked,
         modifier = Modifier.fillMaxWidth()
     ) { Text("① を実行した — 出動を記録する") }
 

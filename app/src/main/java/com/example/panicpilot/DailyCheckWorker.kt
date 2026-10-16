@@ -191,14 +191,15 @@ class DailyCheckWorker(
         // ─── ポジション保有中: 買い増し・高値圏の通知 ───
         // 水準に達したときに1回。いったん水準より上に戻ってから再び達したら、もう1回
         episode(notified, "fill2",
-            pos != null && !pos.fill2Done && status.indexLast <= pos.trigger2, today) {
+            // v2.3.11: 撤退ロック中は買い増しも止める（「全売却」と通知した後に「追加投入」が届いていた）
+            !lockedOut && pos != null && !pos.fill2Done && status.indexLast <= pos.trigger2, today) {
             NotificationHelper.notify(
                 ctx, 3, "📉 2回目の買い増し水準に到達",
                 "日経平均 ${fmt(status.indexLast)}円 ≤ 基準-5%（${fmt(pos!!.trigger2)}円）。予算の1/3を追加投入"
             )
         }
         episode(notified, "fill3",
-            pos != null && !pos.fill3Done && status.indexLast <= pos.trigger3, today) {
+            !lockedOut && pos != null && !pos.fill3Done && status.indexLast <= pos.trigger3, today) {
             NotificationHelper.notify(
                 ctx, 4, "📉 3回目の買い増し水準に到達",
                 "日経平均 ${fmt(status.indexLast)}円 ≤ 基準-10%（${fmt(pos!!.trigger3)}円）。残りの予算を投入"
@@ -344,14 +345,14 @@ class DailyCheckWorker(
 
         // ─── ポジション保有中: 買い増し・出口 ───
         episode(notified, "us_fill2",
-            pos != null && !pos.fill2Done && us.indexLast <= pos.trigger2, today) {
+            usRetreatedAt == null && pos != null && !pos.fill2Done && us.indexLast <= pos.trigger2, today) {
             NotificationHelper.notify(
                 ctx, NOTIF_ID_US_FILL2, "📉 米国：2回目の買い増し水準に到達",
                 "S&P500 ${fmt(us.indexLast)} ≤ 基準-5%（${fmt(pos!!.trigger2)}）。予算の1/3を追加投入"
             )
         }
         episode(notified, "us_fill3",
-            pos != null && !pos.fill3Done && us.indexLast <= pos.trigger3, today) {
+            usRetreatedAt == null && pos != null && !pos.fill3Done && us.indexLast <= pos.trigger3, today) {
             NotificationHelper.notify(
                 ctx, NOTIF_ID_US_FILL3, "📉 米国：3回目の買い増し水準に到達",
                 "S&P500 ${fmt(us.indexLast)} ≤ 基準-10%（${fmt(pos!!.trigger3)}）。残りの予算を投入"

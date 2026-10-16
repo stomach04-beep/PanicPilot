@@ -80,7 +80,11 @@ object YahooChart {
      *                  「下落」に化ける罠の対策）。false=生の close（指数用）
      * 末尾の行が null だったときは meta の終値で補完する（fillLastFromMeta）
      */
-    fun parseCloses(body: String, preferAdj: Boolean): List<Pair<Long, Double>> {
+    fun parseCloses(
+        body: String,
+        preferAdj: Boolean,
+        nowSec: Long = System.currentTimeMillis() / 1000L   // 単体テストで「今」を差し替える口
+    ): List<Pair<Long, Double>> {
         val result = JSONObject(body).getJSONObject("chart")
             .getJSONArray("result").getJSONObject(0)
         val ts = result.optJSONArray("timestamp") ?: return emptyList()
@@ -99,7 +103,7 @@ object YahooChart {
 
         val meta = result.optJSONObject("meta") ?: return out
         val metaPrice = meta.optDouble("regularMarketPrice")
-        return fillLastFromMeta(
+        val filled = fillLastFromMeta(
             rows = out,
             lastTs = ts.getLong(ts.length() - 1),
             metaTime = meta.optLong("regularMarketTime", 0L),
@@ -107,6 +111,41 @@ object YahooChart {
             // 取引所の時間帯が分からないときは日付の突き合わせができないので補完しない
             tzId = meta.optString("exchangeTimezoneName", "")
         )
+        // 取引中なら、その取引日の途中値の足を落とす（補完した足も含めて落ちる）
+        val regular = meta.optJSONObject("currentTradingPeriod")?.optJSONObject("regular")
+        return completedBars(
+            rows = filled,
+            regularStart = regular?.optLong("start", 0L)?.takeIf { it > 0 },
+            regularEnd = regular?.optLong("end", 0L)?.takeIf { it > 0 },
+            nowSec = nowSec
+        )
+    }
+
+    /** 引け後、日足の終値が落ち着くまで待つ時間（秒）。この間はまだ取引中とみなす（BargainChecker と同じ値） */
+    internal const val SESSION_SETTLE_SEC = 15 * 60L
+
+    /**
+     * 取引中の取引日の足を落とす（v2.3.11・2026-10-16）【純粋関数・確定足の単一定義】。
+     *
+     * Yahoo の日足は取引中、その日の足を途中値で返す。そのまま使うと「データ日付 10-15」と
+     * 確定値のように保存され、米国の取引中（日本の深夜）に走った判定は途中値で点灯・消灯し、
+     * 1306 は場中に一瞬 -10% を割っただけで60日時計が始まる（翌日に足が戻ると偽のエピソード終了）。
+     * 2026-10-16 03:02 の実機の保存値で S&P500 が 7,732（途中値）・確定終値は 7,744 だった。
+     *
+     * 判定は meta.currentTradingPeriod.regular（夏冬時間・短縮取引は Yahoo 側で反映済み）。
+     * 取引中（開始〜引け＋15分）なら開始以降の足を落とす。引け後・週末・開始前は何も落とさない。
+     * regular が読めないときは判定できないので従来どおり落とさない。
+     * 式は BargainChecker の MarketDataFetcher.completedBars（v19.3）と同じ
+     */
+    internal fun completedBars(
+        rows: List<Pair<Long, Double>>,
+        regularStart: Long?,
+        regularEnd: Long?,
+        nowSec: Long
+    ): List<Pair<Long, Double>> {
+        if (regularStart == null || regularEnd == null) return rows
+        val inSession = nowSec >= regularStart && nowSec < regularEnd + SESSION_SETTLE_SEC
+        return if (inSession) rows.filter { it.first < regularStart } else rows
     }
 
     /**

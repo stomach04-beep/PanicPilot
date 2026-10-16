@@ -212,7 +212,7 @@ private fun AppRoot() {
                         }
                 }
                 when (jpTab) {
-                    0 -> SignalScreen(status, lastError, tpxStatus)
+                    0 -> SignalScreen(status, lastError, tpxStatus, retreatedAt)
                     1 -> TrendScreen(status)
                     2 -> PlanScreen(
                         status = status,

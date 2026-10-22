@@ -30,8 +30,8 @@ object MarketFetcherUs {
      * chart APIレスポンスから (タイムスタンプ秒, 終値) の列を取り出す。
      * 指数なので生の close を使う。取得の再試行と末尾null行の補完は YahooChart に集約（v2.3.4）
      */
-    private fun parseCloses(body: String): List<Pair<Long, Double>> =
-        YahooChart.parseCloses(body, preferAdj = false)
+    private fun parseCloses(body: String, fillMidNull: Boolean = false): List<Pair<Long, Double>> =
+        YahooChart.parseCloses(body, preferAdj = false, fillMidNull = fillMidNull)
 
     private fun httpGet(url: String): String = YahooChart.httpGet(url)
 
@@ -50,7 +50,9 @@ object MarketFetcherUs {
      * 計算定義は日本版 MarketFetcher.fetch() と同じ（52週=直近252営業日、5日率=pct_change(5)）
      */
     fun fetch(): UsMarketStatus {
-        val rows = parseCloses(httpGet(GSPC_URL)).sortedBy { it.first }
+        // v2.3.13: 途中の null 行は埋めて行数を保つ（下の5日率・推移の ret5d は行の位置で数えるため）。
+        // VIX は日付で突き合わせるので埋めない（祝日の null 行が営業日に化けるのを避ける）
+        val rows = parseCloses(httpGet(GSPC_URL), fillMidNull = true).sortedBy { it.first }
         require(rows.size >= 260) { "S&P500の行数不足: ${rows.size}行（ソース障害の可能性）" }
 
         val idxAll = rows.map { it.second }

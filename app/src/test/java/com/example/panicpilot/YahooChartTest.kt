@@ -131,4 +131,38 @@ class YahooChartTest {
         val kept = YahooChart.completedBars(rowsWithToday, null, null, nowSec = start + 3600)
         assertEquals(rowsWithToday, kept)
     }
+
+    // ─── v2.3.13: 途中の null 行を直前の終値で埋める（S&P500 用） ───
+    // 2026-10-22 の実例: ^GSPC は 10-21 が null。詰めると「6行前」が 10-14 になり、
+    // 5日率が 7663.76/7718.94-1=-0.71%（正しくは 10-15 比の -1.04%）になった
+
+    private val tsUs = listOf(1014L, 1015L, 1016L, 1019L, 1020L, 1021L, 1022L)  // 並びだけ使う仮の時刻
+    private val closesUs = listOf(7718.94, 7744.06, 7659.44, 7690.73, 7712.57, Double.NaN, 7663.76)
+
+    @Test
+    fun 途中のnull行は直前の終値で埋まり行数が保たれる() {
+        val (rows, filled) = YahooChart.collectRows(tsUs, closesUs, fillMidNull = true)
+        assertEquals(7, rows.size)
+        assertEquals(1021L to 7712.57, rows[5])          // 10-21 は 10-20 の終値
+        assertEquals(setOf(1021L), filled)
+        // 5日率は 10-15 と比べる（MarketFetcherUs と同じ「6行前」）
+        val ret5d = rows.last().second / rows[rows.size - 6].second - 1.0
+        assertEquals(7663.76 / 7744.06 - 1.0, ret5d, 1e-12)
+    }
+
+    @Test
+    fun 既定では途中のnull行を詰める() {
+        val (rows, filled) = YahooChart.collectRows(tsUs, closesUs, fillMidNull = false)
+        assertEquals(6, rows.size)
+        assertTrue(filled.isEmpty())
+    }
+
+    @Test
+    fun 先頭と末尾のnull行は埋めない() {
+        val (rows, filled) = YahooChart.collectRows(
+            listOf(1L, 2L, 3L, 4L), listOf(Double.NaN, 10.0, 11.0, Double.NaN), fillMidNull = true
+        )
+        assertEquals(listOf(2L to 10.0, 3L to 11.0), rows)   // 先頭は埋める元が無い・末尾は meta 補完の担当
+        assertTrue(filled.isEmpty())
+    }
 }

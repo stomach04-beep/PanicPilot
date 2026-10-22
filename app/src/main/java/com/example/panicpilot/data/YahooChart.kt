@@ -79,11 +79,16 @@ object YahooChart {
      * @param preferAdj true=分配金調整済みの adjclose を優先（ETF用。1306の分配落ちが
      *                  「下落」に化ける罠の対策）。false=生の close（指数用）
      * 末尾の行が null だったときは meta の終値で補完する（fillLastFromMeta）
+     * @param fillMidNull v2.3.13: 途中の null 行を直前の終値で埋めて行数（＝営業日の数）を保つ。
+     *   S&P500 は5日率を「6行前」と比べて出すので、捨てて詰めると1日古い日と比べてしまう
+     *   （2026-10-22: ^GSPC の 10-21 が null で、正しくは -1.04% の5日率が -0.71% になる形）。
+     *   祝日を null 行で返す銘柄（^VIX など）で埋めると祝日が営業日に化けるので、既定は埋めない
      */
     fun parseCloses(
         body: String,
         preferAdj: Boolean,
-        nowSec: Long = System.currentTimeMillis() / 1000L   // 単体テストで「今」を差し替える口
+        nowSec: Long = System.currentTimeMillis() / 1000L,  // 単体テストで「今」を差し替える口
+        fillMidNull: Boolean = false
     ): List<Pair<Long, Double>> {
         val result = JSONObject(body).getJSONObject("chart")
             .getJSONArray("result").getJSONObject(0)
@@ -94,14 +99,15 @@ object YahooChart {
         val closes = adj
             ?: indicators.getJSONArray("quote").getJSONObject(0).optJSONArray("close")
             ?: return emptyList()
-        val out = ArrayList<Pair<Long, Double>>(ts.length())
-        for (i in 0 until ts.length()) {
-            val c = closes.optDouble(i)          // nullは NaN で返る
-            if (!c.isNaN() && c > 0) out.add(ts.getLong(i) to c)
-        }
+        // nullは NaN で返る
+        val (out, filledTs) = collectRows(
+            (0 until ts.length()).map { ts.getLong(it) },
+            (0 until ts.length()).map { closes.optDouble(it) },
+            fillMidNull
+        )
         if (ts.length() == 0) return out
 
-        val meta = result.optJSONObject("meta") ?: return out
+        val meta = result.optJSONObject("meta") ?: return out.dropLastWhile { it.first in filledTs }
         val metaPrice = meta.optDouble("regularMarketPrice")
         val filled = fillLastFromMeta(
             rows = out,
@@ -118,7 +124,31 @@ object YahooChart {
             regularStart = regular?.optLong("start", 0L)?.takeIf { it > 0 },
             regularEnd = regular?.optLong("end", 0L)?.takeIf { it > 0 },
             nowSec = nowSec
-        )
+        ).dropLastWhile { it.first in filledTs }   // 埋めた行が末尾に残ったら外す（前日の終値が最新日に化けるため）
+    }
+
+    /**
+     * (タイムスタンプ, 終値) の行を集める【純粋関数・テスト対象】。NaN・0以下の行は捨てる。
+     * fillMidNull なら途中の空行は直前の終値で埋める（先頭側で直前が無いときは捨てる。
+     * 末尾の空行は fillLastFromMeta の担当なので埋めない）。
+     * @return 集めた行と、埋めた行のタイムスタンプ（末尾に残ったら外すため）
+     */
+    internal fun collectRows(
+        ts: List<Long>,
+        closes: List<Double>,
+        fillMidNull: Boolean
+    ): Pair<List<Pair<Long, Double>>, Set<Long>> {
+        val out = ArrayList<Pair<Long, Double>>(ts.size)
+        val filledTs = HashSet<Long>()
+        for (i in ts.indices) {
+            val c = closes.getOrElse(i) { Double.NaN }
+            if (!c.isNaN() && c > 0) {
+                out.add(ts[i] to c)
+            } else if (fillMidNull && i < ts.size - 1) {
+                out.lastOrNull()?.let { out.add(ts[i] to it.second); filledTs.add(ts[i]) }
+            }
+        }
+        return out to filledTs
     }
 
     /** 引け後、日足の終値が落ち着くまで待つ時間（秒）。この間はまだ取引中とみなす（BargainChecker と同じ値） */

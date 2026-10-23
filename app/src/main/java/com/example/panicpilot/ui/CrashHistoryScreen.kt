@@ -36,21 +36,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.panicpilot.data.CRASH_HISTORY
 import com.example.panicpilot.data.CrashEpisode
 import com.example.panicpilot.data.LitSegment
 import com.example.panicpilot.data.MarketStatus
+import com.example.panicpilot.ui.kit.Sem
+import com.example.panicpilot.ui.kit.Tone
+import com.example.panicpilot.ui.kit.num
 
-// 画面共通の色（点灯＝赤、消灯＝グレー、底＝緑）
-private val COL_LIT = Color(0xFFEF5350)
-private val COL_DIM = Color(0xFFBDBDBD)
-private val COL_BOTTOM = Color(0xFF2E7D32)
-private val COL_PLUS = Color(0xFF2E7D32)
-private val COL_MINUS = Color(0xFFD32F2F)
+// 2026-10-23 表示の決まり UiKit: 色の直書き（点灯＝赤・プラス＝緑・マイナス＝赤）をやめた。
+// 損益の向きは符号（+/-）で示して色を付けない。点灯＝買いの合図なので primary、消灯＝補足色を薄く、
+// 1458の底＝情報色（Tone.INFO）。色は画面のテーマから取るので、ここでは定義を持たない
 
 private fun pct(v: Double?, digits: Int = 1): String =
     if (v == null) "—" else String.format("%+.${digits}f%%", v)
@@ -58,11 +60,17 @@ private fun pct(v: Double?, digits: Int = 1): String =
 private fun plainPct(v: Double?, digits: Int = 1): String =
     if (v == null) "—" else String.format("%.${digits}f%%", v)
 
-private fun colorOf(v: Double?): Color = when {
-    v == null -> Color.Gray
-    v >= 0 -> COL_PLUS
-    else -> COL_MINUS
-}
+/** 点灯中の帯・凡例の色（買いの合図＝primary） */
+@Composable
+private fun litColor(): Color = MaterialTheme.colorScheme.primary
+
+/** 消灯の帯・凡例の色（補足色を薄く） */
+@Composable
+private fun dimColor(): Color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+
+/** 1458の底の印の色（良し悪しではない目印なので情報色） */
+@Composable
+private fun bottomColor(): Color = Sem.fg(Tone.INFO)
 
 private fun median(xs: List<Double>): Double? {
     if (xs.isEmpty()) return null
@@ -130,14 +138,16 @@ private fun SummaryPage(episodes: List<CrashEpisode>) {
         Card(shape = RoundedCornerShape(14.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("何日後に売ったか別の成績（一括買い）", fontWeight = FontWeight.SemiBold)
+                // 表の見出し（12sp・補足色。2026-10-23 表示の決まり UiKit）
+                val headColor = MaterialTheme.colorScheme.onSurfaceVariant
                 Row(Modifier.fillMaxWidth()) {
-                    Text("", Modifier.weight(1.1f), fontSize = 11.sp)
-                    Text("勝率", Modifier.weight(0.9f), fontSize = 11.sp,
-                        color = Color.Gray, textAlign = TextAlign.End)
-                    Text("中央値", Modifier.weight(1f), fontSize = 11.sp,
-                        color = Color.Gray, textAlign = TextAlign.End)
-                    Text("最悪", Modifier.weight(1f), fontSize = 11.sp,
-                        color = Color.Gray, textAlign = TextAlign.End)
+                    Text("", Modifier.weight(1.1f), fontSize = 12.sp)
+                    Text("勝率", Modifier.weight(0.9f), fontSize = 12.sp,
+                        color = headColor, textAlign = TextAlign.End)
+                    Text("中央値", Modifier.weight(1f), fontSize = 12.sp,
+                        color = headColor, textAlign = TextAlign.End)
+                    Text("最悪", Modifier.weight(1f), fontSize = 12.sp,
+                        color = headColor, textAlign = TextAlign.End)
                 }
                 HorizonRow("5営業日", r5)
                 HorizonRow("1ヶ月", r1)
@@ -158,14 +168,13 @@ private fun SummaryPage(episodes: List<CrashEpisode>) {
                 // v2.3.5: -3%回復での売却は旧ルール。現行は「買ったら売らない」（検証50・57）
                 Text("旧・出口ルールで売った場合（参考）", fontWeight = FontWeight.SemiBold)
                 Text("（日経が52週高値-3%まで回復したら売却。現行は売らず、出口は撤退線のみ）",
-                    style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(2.dp))
-                StatRow("成績", "${exits.count { it > 0 }}勝${exits.count { it <= 0 }}敗",
-                    if (exits.all { it > 0 }) COL_PLUS else COL_MINUS)
-                StatRow("損益の中央値", pct(median(exits)), colorOf(median(exits)))
+                StatRow("成績", "${exits.count { it > 0 }}勝${exits.count { it <= 0 }}敗")
+                StatRow("損益の中央値", pct(median(exits)))
                 StatRow("保有期間の中央値",
-                    median(exitDays.map { it.toDouble() })?.let { "${it.toInt()}営業日" } ?: "—",
-                    MaterialTheme.colorScheme.onSurface)
+                    median(exitDays.map { it.toDouble() })?.let { "${it.toInt()}営業日" } ?: "—")
             }
         }
 
@@ -175,10 +184,10 @@ private fun SummaryPage(episodes: List<CrashEpisode>) {
                 val g12 = episodes.mapNotNull { it.g12m }
                 val ddA = episodes.map { it.maxDdA }
                 val ddG = episodes.map { it.maxDdG }
-                StatRow("一括の中央値", pct(median(r12)), colorOf(median(r12)))
-                StatRow("3分割の中央値", pct(median(g12)), colorOf(median(g12)))
-                StatRow("一括の含み損（最悪）", plainPct(ddA.minOrNull()), COL_MINUS)
-                StatRow("3分割の含み損（最悪）", plainPct(ddG.minOrNull()), COL_MINUS)
+                StatRow("一括の中央値", pct(median(r12)))
+                StatRow("3分割の中央値", pct(median(g12)))
+                StatRow("一括の含み損（最悪）", plainPct(ddA.minOrNull()))
+                StatRow("3分割の含み損（最悪）", plainPct(ddG.minOrNull()))
                 Text(
                     "3分割（出動タブの既定プラン）は、深く下げた局面で買い増しが入るぶん" +
                     "含み損が浅くなります。浅い押し目で終わると1/3しか買えないので" +
@@ -214,22 +223,22 @@ private fun HorizonRow(label: String, xs: List<Double>) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(1.1f), fontSize = 13.sp)
         // toInt()は切り捨て。81.8%を81%と出すと検証レポート側（82%）とズレるので四捨五入する
+        // 2026-10-23 表示の決まり UiKit: 勝率の緑/赤・損益のプラス緑/マイナス赤をやめ、符号と数字だけで示す
         Text(win?.let { "${Math.round(it)}%" } ?: "—", Modifier.weight(0.9f), fontSize = 13.sp,
-            fontWeight = FontWeight.Bold, textAlign = TextAlign.End,
-            color = if ((win ?: 0.0) >= 80) COL_PLUS else if ((win ?: 0.0) < 50) COL_MINUS else Color.Gray)
+            fontWeight = FontWeight.Bold, textAlign = TextAlign.End, style = TextStyle.Default.num())
         Text(pct(median(xs)), Modifier.weight(1f), fontSize = 13.sp,
-            textAlign = TextAlign.End, color = colorOf(median(xs)))
+            textAlign = TextAlign.End, style = TextStyle.Default.num())
         Text(pct(xs.minOrNull()), Modifier.weight(1f), fontSize = 13.sp,
-            textAlign = TextAlign.End, color = colorOf(xs.minOrNull()))
+            textAlign = TextAlign.End, style = TextStyle.Default.num())
     }
 }
 
 @Composable
-private fun StatRow(label: String, value: String, color: Color) {
+private fun StatRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(1f), fontSize = 13.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = color)
+        Text(value, fontSize = 14.sp, fontWeight = FontWeight.Bold, style = TextStyle.Default.num())
     }
 }
 
@@ -247,20 +256,21 @@ private fun EpisodePage(e: CrashEpisode, status: MarketStatus?) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(e.title, Modifier.weight(1f),
                 style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Surface(color = COL_LIT, shape = RoundedCornerShape(4.dp)) {
-                Text(" ${e.kind} ", color = Color.White, fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+            // 点灯した条件の札（2026-10-23 表示の決まり UiKit: 赤地に白をやめ、買いの合図の薄い地 primaryContainer に）
+            Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(50)) {
+                Text(e.kind, color = MaterialTheme.colorScheme.onPrimaryContainer, fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold, maxLines = 1,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
             }
         }
 
-        // サマリー
+        // サマリー（2026-10-23 表示の決まり UiKit: 下落・損益の赤緑をやめ、数字と符号だけで示す）
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Chip("点灯日", e.litDate, MaterialTheme.colorScheme.onSurface)
-            Chip("日経の下落", plainPct(e.dd52w), COL_MINUS)
-            Chip("点灯回数", "${e.litCount}回", MaterialTheme.colorScheme.onSurface)
-            Chip("底まで", "${e.bottomOffset}日", COL_MINUS)
-            Chip("12ヶ月後", pct(e.r12m), colorOf(e.r12m))
+            Chip("点灯日", e.litDate)
+            Chip("日経の下落", plainPct(e.dd52w))
+            Chip("点灯回数", "${e.litCount}回")
+            Chip("底まで", "${e.bottomOffset}日")
+            Chip("12ヶ月後", pct(e.r12m))
         }
 
         // ── 点灯⇔消灯の推移（チャタリングが見えるバー） ──
@@ -269,12 +279,13 @@ private fun EpisodePage(e: CrashEpisode, status: MarketStatus?) {
                 Text("点灯と消灯の推移", fontWeight = FontWeight.SemiBold)
                 LitTimelineBar(e)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    LegendDot(COL_LIT, "点灯中")
-                    LegendDot(COL_DIM, "消灯")
+                    LegendDot(litColor(), "点灯中")
+                    LegendDot(dimColor(), "消灯")
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.width(3.dp).height(10.dp).background(COL_BOTTOM))
+                        Box(Modifier.width(3.dp).height(12.dp).background(bottomColor()))
                         Spacer(Modifier.width(3.dp))
-                        Text("1458の底", fontSize = 10.sp, color = Color.Gray)
+                        Text("1458の底", fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 val dim = if (e.dimDate.isBlank()) "まだ消えていません" else "${e.dimDate}に消灯"
@@ -318,7 +329,8 @@ private fun EpisodePage(e: CrashEpisode, status: MarketStatus?) {
                 Text("旧・出口ルールで売った場合（参考）", fontWeight = FontWeight.SemiBold)
                 if (e.exitRet == null) {
                     Text("まだ52週高値-3%まで回復していません（保有中）",
-                        style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
                     RetRow("${e.exitDate}に売却（${e.exitDays}営業日）", e.exitRet)
                 }
@@ -329,14 +341,16 @@ private fun EpisodePage(e: CrashEpisode, status: MarketStatus?) {
         Card(shape = RoundedCornerShape(14.dp)) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("点灯したときの3指標", fontWeight = FontWeight.SemiBold)
+                // 表の見出し（12sp・補足色。2026-10-23 表示の決まり UiKit）
+                val headColor = MaterialTheme.colorScheme.onSurfaceVariant
                 Row(Modifier.fillMaxWidth()) {
-                    Text("", Modifier.weight(1.3f), fontSize = 10.sp)
-                    Text("当時", Modifier.weight(0.8f), fontSize = 10.sp,
-                        color = Color.Gray, textAlign = TextAlign.End)
-                    Text("いま", Modifier.weight(0.8f), fontSize = 10.sp,
-                        color = Color.Gray, textAlign = TextAlign.End)
-                    Text("点灯ライン", Modifier.weight(0.9f), fontSize = 10.sp,
-                        color = Color.Gray, textAlign = TextAlign.End)
+                    Text("", Modifier.weight(1.3f), fontSize = 12.sp)
+                    Text("当時", Modifier.weight(0.8f), fontSize = 12.sp,
+                        color = headColor, textAlign = TextAlign.End)
+                    Text("いま", Modifier.weight(0.8f), fontSize = 12.sp,
+                        color = headColor, textAlign = TextAlign.End)
+                    Text("点灯ライン", Modifier.weight(0.9f), fontSize = 12.sp,
+                        color = headColor, textAlign = TextAlign.End)
                 }
                 CompareRow("52週高値からの下落", e.dd52w, status?.let { it.dd52w * 100 },
                     plainPct(MarketStatus.TH_DD * 100))
@@ -350,9 +364,13 @@ private fun EpisodePage(e: CrashEpisode, status: MarketStatus?) {
     }
 }
 
-/** 点灯（赤）と消灯（グレー）の帯。1458の底に緑の縦線を立てる */
+/** 点灯（primary）と消灯（薄い補足色）の帯。1458の底に情報色の縦線を立てる */
 @Composable
 private fun LitTimelineBar(e: CrashEpisode) {
+    val lit = litColor()
+    val dim = dimColor()
+    val bottom = bottomColor()
+    val sub = MaterialTheme.colorScheme.onSurfaceVariant
     val total = e.timeline.sumOf { it.days }.toFloat().coerceAtLeast(1f)
     // タイムラインは点灯日から始まる。買いは翌営業日なので、底の位置は +1 日ずらす
     val bottomPos = (e.bottomOffset + 1).toFloat()
@@ -367,7 +385,7 @@ private fun LitTimelineBar(e: CrashEpisode) {
                         Modifier
                             .fillMaxHeight()
                             .weight(seg.days / total)
-                            .background(if (seg.lit) COL_LIT else COL_DIM)
+                            .background(if (seg.lit) lit else dim)
                     )
                 }
             }
@@ -377,39 +395,42 @@ private fun LitTimelineBar(e: CrashEpisode) {
                         .offset(x = fullWidth * (bottomPos / total) - 1.5.dp)
                         .width(3.dp)
                         .fillMaxHeight()
-                        .background(COL_BOTTOM)
+                        .background(bottom)
                 )
             }
         }
+        // 2026-10-23 表示の決まり UiKit: 10sp・灰色の直書きを 12sp・補足色に
         Row(
             Modifier.fillMaxWidth().padding(top = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(e.litDate, fontSize = 10.sp, color = Color.Gray)
+            Text(e.litDate, fontSize = 12.sp, color = sub)
             Text(
                 if (bottomPos <= total) "底: ${e.bottomDate}"
                 else "底はこの先（${e.bottomDate}）",
-                fontSize = 10.sp, color = COL_BOTTOM, fontWeight = FontWeight.Bold
+                fontSize = 12.sp, color = bottom, fontWeight = FontWeight.Bold
             )
-            Text("${e.timelineDays}営業日", fontSize = 10.sp, color = Color.Gray)
+            Text("${e.timelineDays}営業日", fontSize = 12.sp, color = sub)
         }
     }
 }
 
+/** 局面の要約の小さな札（ラベル12sp・値14sp。損益の向きは符号で示し色は付けない） */
 @Composable
-private fun Chip(label: String, value: String, valueColor: Color) {
+private fun Chip(label: String, value: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, fontSize = 9.sp, color = Color.Gray, maxLines = 1)
-        Text(value, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = valueColor)
+        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+            overflow = TextOverflow.Ellipsis)
+        Text(value, fontSize = 14.sp, fontWeight = FontWeight.Bold, style = TextStyle.Default.num())
     }
 }
 
 @Composable
 private fun LegendDot(color: Color, label: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(10.dp).clip(RoundedCornerShape(2.dp)).background(color))
+        Box(Modifier.size(12.dp).clip(RoundedCornerShape(2.dp)).background(color))
         Spacer(Modifier.width(3.dp))
-        Text(label, fontSize = 10.sp, color = Color.Gray)
+        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -417,20 +438,21 @@ private fun LegendDot(color: Color, label: String) {
 private fun RetRow(label: String, v: Double?) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(1f), fontSize = 13.sp)
-        Text(pct(v), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = colorOf(v))
+        Text(pct(v), fontSize = 14.sp, fontWeight = FontWeight.Bold, style = TextStyle.Default.num())
     }
 }
 
 @Composable
 private fun CompareRow(label: String, past: Double?, now: Double?, threshold: String) {
+    val sub = MaterialTheme.colorScheme.onSurfaceVariant
     Row(Modifier.fillMaxWidth().padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        Text(label, Modifier.weight(1.3f), fontSize = 12.sp, color = Color.Gray)
+        Text(label, Modifier.weight(1.3f), fontSize = 12.sp, color = sub)
         Text(past?.let { String.format("%.1f", it) } ?: "—", Modifier.weight(0.8f),
             fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
         Text(now?.let { String.format("%.1f", it) } ?: "—", Modifier.weight(0.8f),
-            fontSize = 12.sp, color = Color.Gray, textAlign = TextAlign.End)
-        Text(threshold, Modifier.weight(0.9f), fontSize = 10.sp,
-            color = Color.Gray, textAlign = TextAlign.End)
+            fontSize = 12.sp, color = sub, textAlign = TextAlign.End)
+        Text(threshold, Modifier.weight(0.9f), fontSize = 12.sp,
+            color = sub, textAlign = TextAlign.End)
     }
 }

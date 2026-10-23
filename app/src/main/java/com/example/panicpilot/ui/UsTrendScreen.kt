@@ -14,6 +14,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.panicpilot.data.UsMarketStatus
+import com.example.panicpilot.ui.kit.Sem
+import com.example.panicpilot.ui.kit.Tone
 
 /**
  * 米国・推移タブ: 3指標（52週DD・5日率・VIX）の過去約1年の折れ線グラフ。
@@ -26,12 +28,12 @@ fun UsTrendScreen(status: UsMarketStatus?) {
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         val hist = status?.history ?: emptyList()
         if (hist.size < 2) {
             Text(
-                "推移データがまだありません。トップの ↻ で更新してください。",
+                "推移データがまだありません。右上の更新ボタンで更新してください。",
                 style = MaterialTheme.typography.bodyMedium
             )
             return@Column
@@ -39,10 +41,13 @@ fun UsTrendScreen(status: UsMarketStatus?) {
 
         Text(
             "各指標の過去約1年の推移です。左が縦軸（値）、下が横軸（日付）。" +
-                "色付きの点線が点灯ライン、赤丸はその日に点灯していた日です。",
+                "色付きの点線が点灯ライン、丸印はその日に点灯していた日です。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        // しきい値ラインの色（2026-10-23 表示の決まり UiKit: 点灯＝primary／確信度＝注意色。赤の直書きをやめた）
+        val litLine = MaterialTheme.colorScheme.primary
+        val cautionLine = Sem.fg(Tone.CAUTION)
 
         // ① 52週高値からの下落率（点灯=-15%以下）
         IndicatorChart(
@@ -51,7 +56,7 @@ fun UsTrendScreen(status: UsMarketStatus?) {
             dateOf = { it.date },
             valueOf = { it.dd52w * 100.0 },
             litOf = { it.litDd },
-            thresholds = listOf(ThLine(UsMarketStatus.TH_DD * 100.0, TrendFireRed, "点灯 -15%")),
+            thresholds = listOf(ThLine(UsMarketStatus.TH_DD * 100.0, litLine,"点灯 -15%")),
             valueLabel = { "%+.0f%%".format(it) },
             currentLabel = { "%+.1f%%".format(it) }
         )
@@ -63,7 +68,7 @@ fun UsTrendScreen(status: UsMarketStatus?) {
             dateOf = { it.date },
             valueOf = { it.ret5d * 100.0 },
             litOf = { it.litFast },
-            thresholds = listOf(ThLine(UsMarketStatus.TH_FAST * 100.0, TrendFireRed, "点灯 -8%")),
+            thresholds = listOf(ThLine(UsMarketStatus.TH_FAST * 100.0, litLine,"点灯 -8%")),
             valueLabel = { "%+.0f%%".format(it) },
             currentLabel = { "%+.1f%%".format(it) }
         )
@@ -75,7 +80,7 @@ fun UsTrendScreen(status: UsMarketStatus?) {
             dateOf = { it.date },
             valueOf = { it.vix },
             litOf = { false },
-            thresholds = listOf(ThLine(UsMarketStatus.TH_VIX, TrendWarnAmber, "確信度 30")),
+            thresholds = listOf(ThLine(UsMarketStatus.TH_VIX, cautionLine,"確信度 30")),
             valueLabel = { "%.0f".format(it) },
             currentLabel = { "%.1f".format(it) }
         )

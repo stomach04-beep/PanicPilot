@@ -1,6 +1,5 @@
 package com.example.panicpilot.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,7 +7,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -27,19 +25,18 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.panicpilot.data.Position
 import com.example.panicpilot.data.UsMarketStatus
+import com.example.panicpilot.ui.kit.Fmt
+import com.example.panicpilot.ui.kit.InfoToggle
+import com.example.panicpilot.ui.kit.Panel
 import kotlin.math.floor
 
-// 点灯色（SignalScreenと同じ配色。private のためファイルごとに定義）
-private val FireRed = Color(0xFFE05B4C)
-private val WarnAmber = Color(0xFFDBA13A)
-private val CalmGray = Color(0xFF8A8A8A)
+// 2026-10-23 表示の決まり UiKit: 点灯色（赤・橙・灰）の直書きをやめ、日本側（SignalScreen.kt）の
+// 共用部品 SignalBanner / SignalCard / InfoRow を使う（同じ部品の複製を持たない）
 
 /**
  * 米国・シグナルタブ: S&P500の出動シグナル表示（v2.0でタブを日本/米国の2階層に分け、
@@ -57,77 +54,67 @@ fun UsSignalScreen(
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         if (status == null) {
-            Text(
-                if (lastError != null) "米国データ取得に失敗しました:\n$lastError"
-                else "米国データ取得中…",
-                style = MaterialTheme.typography.bodyMedium
-            )
+            // 2026-10-23 表示の決まり UiKit: 「取得中…」1行だけでなく、失敗理由か取り直し方を出す
+            NoDataPanel(lastError, "米国")
             return@Column
         }
 
         // ─── 総合判定バナー（米国はDEEP/CALMの2値） ───
-        val (label, color, advice) = when {
+        // 2026-10-23 表示の決まり UiKit: 色でなく見た目の種類で持つ（色は SignalBanner が決める）
+        val (label, look, advice) = when {
             retreatedAt != null && status.deep -> Triple(
-                "⛔ 点灯中だが出動禁止", FireRed,
+                "⛔ 点灯中だが出動禁止", BannerLook.DANGER,
                 "撤退ロック中。52週高値-3%まで回復するまで新規出動しない（検証46）"
             )
             status.deep -> Triple(
-                "🚨 出動（米国）", FireRed,
+                "🚨 出動（米国）", BannerLook.STRONG,
                 "点灯中。VIXで金額を決めて、SPXLを3分割でエントリー（出動タブで計画を作成）"
             )
             else -> Triple(
-                "😴 待機（米国）", CalmGray,
+                "😴 待機（米国）", BannerLook.CALM,
                 "平時。米国の点灯は日本より頻度が低い（1990年以降16回）。待つのが仕事"
             )
         }
-        Card(
-            colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.15f)),
-            shape = RoundedCornerShape(14.dp)
-        ) {
-            Column(Modifier.padding(16.dp)) {
-                Text(label, fontSize = 28.sp, fontWeight = FontWeight.Bold, color = color)
-                Spacer(Modifier.height(6.dp))
-                Text(advice, style = MaterialTheme.typography.bodyMedium)
-            }
-        }
+        SignalBanner(label, look, advice)
 
         // ─── シグナル2枚＋VIX ───
-        UsSignalCard(
+        SignalCard(
             title = "S&P500 52週高値からの下落",
-            value = "%+.1f%%".format(status.dd52w * 100),
+            value = Fmt.pct(status.dd52w * 100, 1),
             threshold = "点灯: -15%以下",
             lit = status.sigDd,
             note = "検証45: 点灯→SPXL 12M+62.7%・勝率88%（超過+24.8pt）"
         )
-        UsSignalCard(
+        SignalCard(
             title = "S&P500 5日間リターン（急落検知）",
-            value = "%+.1f%%".format(status.ret5d * 100),
+            value = Fmt.pct(status.ret5d * 100, 1),
             threshold = "点灯: -8%以下",
             lit = status.sigFast,
             note = "検証45: 3M超過は全対象プラス。米国も「速く落ちた」が本質"
         )
-        UsSignalCard(
+        SignalCard(
             title = "VIX（恐怖指数）※点灯条件ではありません",
-            value = if (status.vix.isNaN()) "取得不可" else "%.1f".format(status.vix),
+            value = if (status.vix.isNaN()) "取得不可" else Fmt.num(status.vix, 1),
             threshold = "確信度 高: ${UsMarketStatus.TH_VIX.toInt()}以上",
             lit = false,
             warn = status.vixHigh,
+            warnLabel = "確信度 高",
             note = "検証46: VIX≥30の点灯は12M+35%勝率85%、VIX<30は-18%勝率33%。" +
                 "30未満なら予算を半分に（2008年の2大災害は両方VIX<30だった）"
         )
 
         // ─── 参考情報 ───
-        Card(shape = RoundedCornerShape(14.dp)) {
+        Panel(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                UsInfoRow("S&P500", "%,.0f".format(status.indexLast))
-                UsInfoRow("52週高値", "%,.0f".format(status.high52w))
-                UsInfoRow("出口ライン（高値-3%）", "%,.0f".format(status.exitLine))
-                UsInfoRow("撤退ライン（高値-35%）", "%,.0f".format(status.retreatLine))
-                status.spxl?.let { UsInfoRow("SPXL（S&P500ブル3倍）", "$%,.2f".format(it)) }
-                status.usdJpy?.let { UsInfoRow("ドル円", "%,.2f円".format(it)) }
+                InfoRow("S&P500", Fmt.num(status.indexLast))
+                InfoRow("52週高値", Fmt.num(status.high52w))
+                InfoRow("出口ライン（高値-3%）", Fmt.num(status.exitLine))
+                InfoRow("撤退ライン（高値-35%）", Fmt.num(status.retreatLine))
+                status.spxl?.let { InfoRow("SPXL（S&P500ブル3倍）", "\$" + Fmt.num(it, 2)) }
+                status.usdJpy?.let { InfoRow("ドル円", Fmt.withUnit(it, 2, "円")) }
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "データ日付: ${status.dataDate}（米国東部） ／ 取得: ${status.fetchedAt}",
@@ -138,10 +125,13 @@ fun UsSignalScreen(
         }
 
         // ─── 注意書き（日本版との違い） ───
-        Card(shape = RoundedCornerShape(14.dp)) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("米国版の注意（日本版との違い）", fontWeight = FontWeight.SemiBold)
+        // 2026-10-23 表示の決まり UiKit: 検証の説明なので、ふだんは畳む（文言は不変）
+        Panel(Modifier.fillMaxWidth()) {
+            InfoToggle(title = "米国版の注意（日本版との違い）",
+                modifier = Modifier.padding(horizontal = 16.dp)) {
                 Text(
+                    modifier = Modifier.padding(bottom = 12.dp),
+                    text =
                     "・SPXLは3倍レバ。撤退線があっても最悪-63%級は残る（検証46）。" +
                         "レバなし（VOO等）は12Mの超過エッジがゼロ（検証45）\n" +
                         "・1倍でエッジが出ないので出動は必ずレバ型で。その分、金額は日本版より控えめに\n" +
@@ -324,16 +314,16 @@ private fun UsPositionTracker(
 
     Card(shape = RoundedCornerShape(14.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            UsInfoRow("出動日", pos.entryDate)
-            UsInfoRow("基準 S&P500", "%,.0f".format(pos.baseIndex))
-            UsInfoRow("予算", usYen(pos.budgetYen))
+            InfoRow("出動日", pos.entryDate)
+            InfoRow("基準 S&P500", "%,.0f".format(pos.baseIndex))
+            InfoRow("予算", usYen(pos.budgetYen))
             status?.let {
-                UsInfoRow("現在 S&P500", "%,.0f（基準比 %+.1f%%）"
+                InfoRow("現在 S&P500", "%,.0f（基準比 %+.1f%%）"
                     .format(it.indexLast, (it.indexLast / pos.baseIndex - 1) * 100))
                 // しきい値は UsMarketStatus 側の定義を参照する（数値を直書きしない）
-                UsInfoRow("出口ライン（利確）", "%,.0f（52週高値%.0f%%）"
+                InfoRow("出口ライン（利確）", "%,.0f（52週高値%.0f%%）"
                     .format(it.exitLine, UsMarketStatus.TH_EXIT * 100))
-                UsInfoRow("撤退ライン（損切り）", "%,.0f（52週高値%.0f%%）"
+                InfoRow("撤退ライン（損切り）", "%,.0f（52週高値%.0f%%）"
                     .format(it.retreatLine, UsMarketStatus.TH_RETREAT * 100))
                 if (it.recovered) {
                     Text("🏁 出口シグナル点灯中！ SPXL全売却のタイミングです",
@@ -368,41 +358,7 @@ private fun UsPositionTracker(
     Spacer(Modifier.height(4.dp))
 }
 
-// ─── 部品（SignalScreen/PlanScreen の private 部品と同型。ファイル間で共有できないため再定義） ───
-
-@Composable
-private fun UsSignalCard(
-    title: String, value: String, threshold: String,
-    lit: Boolean, warn: Boolean = false, note: String
-) {
-    val color = when { lit -> FireRed; warn -> WarnAmber; else -> CalmGray }
-    Card(shape = RoundedCornerShape(14.dp)) {
-        Row(
-            Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // 点灯インジケータ（丸）
-            Column(
-                Modifier
-                    .width(14.dp)
-                    .height(14.dp)
-                    .background(color, RoundedCornerShape(7.dp))
-            ) {}
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(title, fontWeight = FontWeight.SemiBold)
-                Text(threshold, style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(note, style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Text(
-                value, fontSize = 20.sp, fontWeight = FontWeight.Bold,
-                color = if (lit) FireRed else MaterialTheme.colorScheme.onSurface
-            )
-        }
-    }
-}
+// ─── 部品（PlanScreen の private 部品と同型。SignalCard / InfoRow は SignalScreen.kt の共用部品を使う） ───
 
 @Composable
 private fun UsStepRow(label: String, amount: String, trigger: String) {
@@ -429,15 +385,6 @@ private fun UsTriggerRow(label: String, done: Boolean, reached: Boolean, onDone:
             )
         }
         if (!done) OutlinedButton(onClick = onDone) { Text("投入した") }
-    }
-}
-
-@Composable
-private fun UsInfoRow(label: String, value: String) {
-    Row(Modifier.fillMaxWidth()) {
-        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
     }
 }
 

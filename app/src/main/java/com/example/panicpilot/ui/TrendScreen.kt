@@ -8,13 +8,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -23,16 +23,19 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.panicpilot.data.HistoryPoint
 import com.example.panicpilot.data.MarketStatus
+import com.example.panicpilot.ui.kit.Panel
+import com.example.panicpilot.ui.kit.Sem
+import com.example.panicpilot.ui.kit.Tone
+import com.example.panicpilot.ui.kit.num
 
-// グラフ配色（シグナル画面と同じ相場慣習）
-// v2.1: 米国推移タブ（UsTrendScreen）とチャート部品を共用するため internal に変更
-internal val TrendFireRed = Color(0xFFE05B4C)
-internal val TrendWarnAmber = Color(0xFFDBA13A)
+// 2026-10-23 表示の決まり UiKit: グラフの赤・橙の直書きをやめた。点灯ライン・点灯日の印は
+// テーマの primary（買いの合図の色）、注意ラインは Tone.CAUTION を呼び出し側の画面で渡す
 
 /** 推移タブ: 3指標の過去約1年（252営業日）の折れ線グラフ */
 @Composable
@@ -42,12 +45,12 @@ fun TrendScreen(status: MarketStatus?) {
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         val hist = status?.history ?: emptyList()
         if (hist.size < 2) {
             Text(
-                "推移データがまだありません。トップの ↻ で更新してください。",
+                "推移データがまだありません。右上の更新ボタンで更新してください。",
                 style = MaterialTheme.typography.bodyMedium
             )
             return@Column
@@ -55,10 +58,13 @@ fun TrendScreen(status: MarketStatus?) {
 
         Text(
             "各指標の過去約1年の推移です。左が縦軸（値）、下が横軸（日付）。" +
-                "色付きの点線が点灯ライン、赤丸はその日に点灯していた日です。",
+                "色付きの点線が点灯ライン、丸印はその日に点灯していた日です。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        // しきい値ラインの色（点灯＝買いの合図の primary／注意＝注意色）
+        val litLine = MaterialTheme.colorScheme.primary
+        val cautionLine = Sem.fg(Tone.CAUTION)
 
         // ① 52週高値からの下落率（%表示、点灯=-15%以下 → 下向きが危険）
         IndicatorChart(
@@ -67,7 +73,7 @@ fun TrendScreen(status: MarketStatus?) {
             dateOf = { it.date },
             valueOf = { it.dd52w * 100.0 },
             litOf = { it.litDd },
-            thresholds = listOf(ThLine(MarketStatus.TH_DD * 100.0, TrendFireRed, "点灯 -15%")),
+            thresholds = listOf(ThLine(MarketStatus.TH_DD * 100.0, litLine, "点灯 -15%")),
             valueLabel = { "%+.0f%%".format(it) },
             currentLabel = { "%+.1f%%".format(it) }
         )
@@ -79,7 +85,7 @@ fun TrendScreen(status: MarketStatus?) {
             dateOf = { it.date },
             valueOf = { it.ret5d * 100.0 },
             litOf = { it.litFast },
-            thresholds = listOf(ThLine(MarketStatus.TH_FAST * 100.0, TrendFireRed, "点灯 -8%")),
+            thresholds = listOf(ThLine(MarketStatus.TH_FAST * 100.0, litLine, "点灯 -8%")),
             valueLabel = { "%+.0f%%".format(it) },
             currentLabel = { "%+.1f%%".format(it) }
         )
@@ -92,8 +98,8 @@ fun TrendScreen(status: MarketStatus?) {
             valueOf = { it.adr25 },
             litOf = { it.litAdr },
             thresholds = listOf(
-                ThLine(MarketStatus.TH_ADR_DEEP, TrendFireRed, "点灯 70"),
-                ThLine(MarketStatus.TH_ADR_SHALLOW, TrendWarnAmber, "注意 80")
+                ThLine(MarketStatus.TH_ADR_DEEP, litLine, "点灯 70"),
+                ThLine(MarketStatus.TH_ADR_SHALLOW, cautionLine, "注意 80")
             ),
             valueLabel = { "%.0f".format(it) },
             currentLabel = { "%.1f".format(it) }
@@ -142,17 +148,24 @@ internal fun <T> IndicatorChart(
     val onSurface = MaterialTheme.colorScheme.onSurface
     val axisColor = MaterialTheme.colorScheme.onSurfaceVariant
     val gridColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
+    // 点灯日の印と「最新」の値の色（点灯＝買いの合図なので primary。2026-10-23 表示の決まり UiKit）
+    val litColor = MaterialTheme.colorScheme.primary
 
-    Card(shape = RoundedCornerShape(14.dp)) {
+    // 2026-10-23 表示の決まり UiKit: 影つき Card をやめ Panel（影・枠なしの面）に
+    Panel(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            Row(Modifier.fillMaxWidth()) {
-                Text(title, Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 lastValid?.let {
+                    Spacer(Modifier.width(8.dp))
                     Text(
                         "最新 " + currentLabel(it),
                         fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        color = if (lits.last()) TrendFireRed else onSurface
+                        fontSize = 16.sp,
+                        style = TextStyle.Default.num(),
+                        maxLines = 1,
+                        color = if (lits.last()) litColor else onSurface
                     )
                 }
             }
@@ -166,7 +179,7 @@ internal fun <T> IndicatorChart(
                 drawIndicator(
                     values, lits, dates, minV, maxV, thresholds,
                     lineColor = onSurface, axisColor = axisColor,
-                    gridColor = gridColor, valueLabel = valueLabel
+                    gridColor = gridColor, litColor = litColor, valueLabel = valueLabel
                 )
             }
         }
@@ -184,6 +197,7 @@ private fun DrawScope.drawIndicator(
     lineColor: Color,
     axisColor: Color,
     gridColor: Color,
+    litColor: Color,                      // 点灯日の印の色（画面側でテーマの primary を渡す）
     valueLabel: (Double) -> String
 ) {
     val n = values.size
@@ -203,7 +217,8 @@ private fun DrawScope.drawIndicator(
     // テキスト用 Paint（android.graphics）
     val txt = android.graphics.Paint().apply {
         color = axisColor.toArgb()
-        textSize = 26f
+        // 2026-10-23 表示の決まり UiKit: 目盛りの文字も12sp以上に（以前は26px固定＝約10sp）
+        textSize = 12.sp.toPx()
         isAntiAlias = true
     }
     val nc = drawContext.canvas.nativeCanvas
@@ -265,11 +280,11 @@ private fun DrawScope.drawIndicator(
         )
     }
 
-    // ─── 点灯日を赤丸で強調 ───
+    // ─── 点灯日を丸印で強調 ───
     for (i in 0 until n) {
         val v = values[i]
         if (v.isNaN() || !lits[i]) continue
-        drawCircle(color = TrendFireRed, radius = 3.5f, center = Offset(xAt(i), yAt(v)))
+        drawCircle(color = litColor, radius = 3.5f, center = Offset(xAt(i), yAt(v)))
     }
 
     // ─── 横軸: 開始・中央・終了の3つの日付（MM/dd） ───

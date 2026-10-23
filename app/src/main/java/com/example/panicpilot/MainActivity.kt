@@ -8,10 +8,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScrollableTabRow
@@ -19,7 +23,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -56,6 +59,7 @@ import com.example.panicpilot.ui.UsEvidenceScreen
 import com.example.panicpilot.ui.UsPlanScreen
 import com.example.panicpilot.ui.UsSignalScreen
 import com.example.panicpilot.ui.UsTrendScreen
+import com.example.panicpilot.ui.kit.ScreenHeader
 import com.example.panicpilot.ui.theme.PanicPilotTheme
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -86,7 +90,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AppRoot() {
     val context = LocalContext.current
@@ -184,17 +187,24 @@ private fun AppRoot() {
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            // 2026-10-23 表示の決まり UiKit: TopAppBar をやめ、背景と同じ色の見出し1段（ScreenHeader）に。
+            // TopAppBar が自分でしていたステータスバーぶんの余白は statusBarsPadding で付ける。
+            // 読み込み中はタイトルを書き換えず、見出しの下の細い進捗バーで示す
+            ScreenHeader(
                 // アプリ名は v2.1 で「Be Greedy」に改名（バフェットの格言
                 // "Be greedy when others are fearful" ＝他人が恐れているときこそ貪欲に）
-                title = { Text(if (loading) "Be Greedy（更新中…）" else "Be Greedy") },
+                title = "Be Greedy",
+                modifier = Modifier.statusBarsPadding(),
                 actions = {
-                    IconButton(onClick = { refresh() }) { Text("↻") }
+                    IconButton(onClick = { refresh() }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "更新")
+                    }
                 }
             )
         }
     ) { pad ->
         Column(Modifier.padding(pad)) {
+            if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             // ─── 1段目: 市場切替（日本 / 米国） ───
             TabRow(selectedTabIndex = market) {
                 listOf("🇯🇵 日本", "🇺🇸 米国", "🥇 金").forEachIndexed { i, label ->

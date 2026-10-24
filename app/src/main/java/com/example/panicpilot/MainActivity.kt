@@ -59,6 +59,7 @@ import com.example.panicpilot.ui.UsEvidenceScreen
 import com.example.panicpilot.ui.UsPlanScreen
 import com.example.panicpilot.ui.UsSignalScreen
 import com.example.panicpilot.ui.UsTrendScreen
+import com.example.panicpilot.ui.kit.HeaderDivider
 import com.example.panicpilot.ui.kit.ScreenHeader
 import com.example.panicpilot.ui.theme.PanicPilotTheme
 import java.text.SimpleDateFormat
@@ -195,6 +196,8 @@ private fun AppRoot() {
                 // "Be greedy when others are fearful" ＝他人が恐れているときこそ貪欲に）
                 title = "Be Greedy",
                 modifier = Modifier.statusBarsPadding(),
+                // 見出しの直下にタブの列が2段あるので、線は2段目のタブの下の1本だけにする
+                divider = false,
                 actions = {
                     IconButton(onClick = { refresh() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "更新")
@@ -206,7 +209,8 @@ private fun AppRoot() {
         Column(Modifier.padding(pad)) {
             if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             // ─── 1段目: 市場切替（日本 / 米国） ───
-            TabRow(selectedTabIndex = market) {
+            // 1段目と2段目の間には線を入れない（境目の線は2段目の下だけ）
+            TabRow(selectedTabIndex = market, divider = {}) {
                 listOf("🇯🇵 日本", "🇺🇸 米国", "🥇 金").forEachIndexed { i, label ->
                     Tab(selected = market == i, onClick = { market = i },
                         text = { Text(label) })
@@ -214,7 +218,8 @@ private fun AppRoot() {
             }
             // ─── 2段目: 市場ごとの機能タブ ───
             if (market == 0) {
-                ScrollableTabRow(selectedTabIndex = jpTab, edgePadding = 8.dp) {
+                ScrollableTabRow(selectedTabIndex = jpTab, edgePadding = 8.dp,
+                    divider = { HeaderDivider() }) {   // 見出しの塊と中身の境目の線
                     listOf("シグナル", "推移", "出動", "根拠", "過去局面", "履歴")
                         .forEachIndexed { i, label ->
                             Tab(selected = jpTab == i, onClick = { jpTab = i },
@@ -249,7 +254,8 @@ private fun AppRoot() {
                     5 -> HistoryScreen()
                 }
             } else if (market == 1) {
-                ScrollableTabRow(selectedTabIndex = usTab, edgePadding = 8.dp) {
+                ScrollableTabRow(selectedTabIndex = usTab, edgePadding = 8.dp,
+                    divider = { HeaderDivider() }) {   // 見出しの塊と中身の境目の線
                     listOf("シグナル", "推移", "出動", "根拠", "過去局面", "履歴")
                         .forEachIndexed { i, label ->
                             Tab(selected = usTab == i, onClick = { usTab = i },
@@ -287,7 +293,8 @@ private fun AppRoot() {
                 // ─── 金スリーブ（v2.3）───
                 // 日米と違い「シグナル」タブが無い。金のタイミングルールは24本総当たり＋
                 // プラセボ検定で全部棄却されたので、当てにいく画面をあえて作っていない
-                ScrollableTabRow(selectedTabIndex = goldTab, edgePadding = 8.dp) {
+                ScrollableTabRow(selectedTabIndex = goldTab, edgePadding = 8.dp,
+                    divider = { HeaderDivider() }) {   // 見出しの塊と中身の境目の線
                     listOf("計画", "配分", "根拠").forEachIndexed { i, label ->
                         Tab(selected = goldTab == i, onClick = { goldTab = i },
                             text = { Text(label) })

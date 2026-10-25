@@ -52,15 +52,8 @@ import com.example.panicpilot.ui.kit.num
 
 // 2026-10-23 表示の決まり UiKit: 色の直書きをやめ、点灯＝買いの合図なので primary、消灯＝補足色を薄く、
 // 1458の底＝情報色（Tone.INFO）にした。色は画面のテーマから取るので、ここでは定義を持たない。
-// 2026-10-24 ユーザー指示で手直し前の色分けに戻した（損益・騰落率はプラス緑・マイナス赤、
-// 勝率は80%以上緑・50%未満赤）。色は Sem.fg(Tone.OK / Tone.CRIT) から取り、判定は下の pnlTone 等に1か所で持つ
-
-/** 損益・騰落率の良し悪し（0以上＝OK緑、マイナス＝CRIT赤、値なし＝null で補足色） */
-private fun pnlTone(v: Double?): Tone? = when {
-    v == null -> null
-    v >= 0 -> Tone.OK
-    else -> Tone.CRIT
-}
+// 2026-10-24 ユーザー指示で手直し前の色分けに戻した（勝率は80%以上緑・50%未満赤）。
+// 2026-10-25 APP_RULES.md B3: 損益・騰落率は ＋赤・−青（Sem.sign）。勝率の段階の色はそのまま（B9）
 
 /** 勝率の良し悪し（80%以上＝OK緑、50%未満＝CRIT赤、それ以外・値なし＝null で補足色） */
 private fun winTone(win: Double?): Tone? = when {
@@ -75,9 +68,9 @@ private fun winTone(win: Double?): Tone? = when {
 private fun toneColor(t: Tone?): Color =
     if (t == null) MaterialTheme.colorScheme.onSurfaceVariant else Sem.fg(t)
 
-/** 損益・騰落率の文字色（プラス緑・マイナス赤・値なし灰） */
+/** 損益・騰落率の文字色（2026-10-25 APP_RULES.md B3: ＋赤・−青・表示上0と値なしは灰。pct の小数1桁で丸めて判定） */
 @Composable
-private fun pnlColor(v: Double?): Color = toneColor(pnlTone(v))
+private fun pnlColor(v: Double?): Color = Sem.sign(v, 1)
 
 private fun pct(v: Double?, digits: Int = 1): String =
     if (v == null) "—" else String.format("%+.${digits}f%%", v)
@@ -196,9 +189,13 @@ private fun SummaryPage(episodes: List<CrashEpisode>) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(2.dp))
-                // 成績: 全部勝ちなら緑、1敗でもあれば赤（手直し前と同じ条件）
+                // 成績: 全部勝ちなら＋側、1敗でもあれば−側（条件は手直し前と同じ。2026-10-25 APP_RULES.md B3 で＋赤・−青）
                 StatRow("成績", "${exits.count { it > 0 }}勝${exits.count { it <= 0 }}敗",
-                    toneColor(if (exits.none { it <= 0 }) Tone.OK else Tone.CRIT))
+                    Sem.sign(when {
+                        exits.isEmpty() -> null
+                        exits.none { it <= 0 } -> 1.0
+                        else -> -1.0
+                    }))
                 StatRow("損益の中央値", pct(median(exits)), pnlColor(median(exits)))
                 StatRow("保有期間の中央値",
                     median(exitDays.map { it.toDouble() })?.let { "${it.toInt()}営業日" } ?: "—")
@@ -213,9 +210,9 @@ private fun SummaryPage(episodes: List<CrashEpisode>) {
                 val ddG = episodes.map { it.maxDdG }
                 StatRow("一括の中央値", pct(median(r12)), pnlColor(median(r12)))
                 StatRow("3分割の中央値", pct(median(g12)), pnlColor(median(g12)))
-                // 含み損は常にマイナスの意味なので赤（手直し前と同じ）
-                StatRow("一括の含み損（最悪）", plainPct(ddA.minOrNull()), toneColor(Tone.CRIT))
-                StatRow("3分割の含み損（最悪）", plainPct(ddG.minOrNull()), toneColor(Tone.CRIT))
+                // 含み損はマイナスの値なので−の青（2026-10-25 APP_RULES.md B3）
+                StatRow("一括の含み損（最悪）", plainPct(ddA.minOrNull()), pnlColor(ddA.minOrNull()))
+                StatRow("3分割の含み損（最悪）", plainPct(ddG.minOrNull()), pnlColor(ddG.minOrNull()))
                 Text(
                     "3分割（出動タブの既定プラン）は、深く下げた局面で買い増しが入るぶん" +
                     "含み損が浅くなります。浅い押し目で終わると1/3しか買えないので" +
@@ -251,7 +248,7 @@ private fun HorizonRow(label: String, xs: List<Double>) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(1.1f), fontSize = 13.sp)
         // toInt()は切り捨て。81.8%を81%と出すと検証レポート側（82%）とズレるので四捨五入する
-        // 2026-10-24 ユーザー指示で手直し前の色分けに戻した（勝率80%以上緑・50%未満赤、損益はプラス緑・マイナス赤）
+        // 勝率は80%以上緑・50%未満赤（2026-10-24 手直し前に戻した段階の色）。損益は2026-10-25 APP_RULES.md B3 で＋赤・−青
         Text(win?.let { "${Math.round(it)}%" } ?: "—", Modifier.weight(0.9f), fontSize = 13.sp,
             color = toneColor(winTone(win)),
             fontWeight = FontWeight.Bold, textAlign = TextAlign.End, style = TextStyle.Default.num())
@@ -295,10 +292,10 @@ private fun EpisodePage(e: CrashEpisode, status: MarketStatus?) {
             }
         }
 
-        // サマリー（2026-10-24 ユーザー指示で手直し前の色分けに戻した: 下落・底までは赤、12ヶ月後はプラス緑・マイナス赤）
+        // サマリー（2026-10-25 APP_RULES.md B3: 下落率と12ヶ月後は＋赤・−青。底までの日数は 2026-10-24 の赤のまま）
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Chip("点灯日", e.litDate)
-            Chip("日経の下落", plainPct(e.dd52w), toneColor(Tone.CRIT))
+            Chip("日経の下落", plainPct(e.dd52w), pnlColor(e.dd52w))
             Chip("点灯回数", "${e.litCount}回")
             Chip("底まで", "${e.bottomOffset}日", toneColor(Tone.CRIT))
             Chip("12ヶ月後", pct(e.r12m), pnlColor(e.r12m))
@@ -471,7 +468,7 @@ private fun LegendDot(color: Color, label: String) {
 private fun RetRow(label: String, v: Double?) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(1f), fontSize = 13.sp)
-        // 2026-10-24 ユーザー指示で手直し前の色分けに戻した（プラス緑・マイナス赤・値なし灰）
+        // 2026-10-25 APP_RULES.md B3: ＋赤・−青・値なし灰
         Text(pct(v), color = pnlColor(v), fontSize = 14.sp, fontWeight = FontWeight.Bold,
             style = TextStyle.Default.num())
     }

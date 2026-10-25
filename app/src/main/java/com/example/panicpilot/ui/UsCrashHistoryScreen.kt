@@ -23,9 +23,11 @@ import androidx.compose.ui.unit.sp
 import com.example.panicpilot.data.UsCrashEpisode
 import com.example.panicpilot.data.UsCrashHistoryData
 import com.example.panicpilot.data.UsMarketStatus
+import com.example.panicpilot.ui.kit.Sem
 
+// VIX≥30（確信度高）の目印の色。＋−の色ではない段階の色なので残す（B9）。
+// ＋−の色は 2026-10-25 APP_RULES.md B3 で Sem.sign に置き換え、DownRed は使わなくなったので削除
 private val UpGreen = Color(0xFF3D9C5A)
-private val DownRed = Color(0xFFE05B4C)
 
 /**
  * 米国・過去局面タブ: 1990年以降の点灯16局面と、実在ETF（SPY/SSO/SPXL）の実勢成績。
@@ -168,11 +170,8 @@ private fun Pct(v: Double?, modifier: Modifier, weight: FontWeight) {
         v?.let { "%+.0f%%".format(it) } ?: "—",
         modifier,
         style = MaterialTheme.typography.bodySmall,
-        color = when {
-            v == null -> MaterialTheme.colorScheme.onSurfaceVariant
-            v >= 0 -> UpGreen
-            else -> DownRed
-        },
+        // 2026-10-25 APP_RULES.md B3: ＋赤・−青・表示上0（%+.0f）と値なしは灰
+        color = Sem.sign(v, 0),
         fontWeight = weight
     )
 }

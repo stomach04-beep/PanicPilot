@@ -15,7 +15,7 @@ android {
         applicationId = "com.example.panicpilot"
         minSdk = 31
         targetSdk = 36
-        versionCode = 34
+        versionCode = 35
         // 2026-10-24 v2.3.15: 損益・騰落率の色（プラス緑・マイナス赤）を手直し前の仕様に戻した（ユーザー指示）
         // 2026-10-15 v2.3.10: 日次チェックを毎日16:30のアラーム（setExactAndAllowWhileIdle の自己連鎖）で起動。
         // 24時間周期は前回の実行から数えるので遅れが翌日へ持ち越されていた（18:01→19:30）。周期ジョブは保険として残す
@@ -27,7 +27,8 @@ android {
         // 2026-09-26 v2.3.7: 点灯・買い増し・高値圏の通知を「状態が続く間は1回だけ」に（毎営業日の同じ通知をやめる・LESSON-211）
         // 2026-09-25 v2.3.6: 取得が戻ったら取得失敗通知を消す／保存ファイルが壊れていたら別名へ退避してから初期化
         // 2026-10-25 v2.3.17: 損益・増減の色を＋赤・−青に（APP_RULES.md B3）
-        versionName = "2.3.18" // 2026-10-24: 見出しと中身の境目に1本の線（v2.3.15: 損益・騰落率の色を手直し前に戻した／v2.3.14: 見た目を表示の決まり UiKit に）
+        // 2026-11-01 v2.3.19: 見出しの左にアプリアイコン、見出しの後ろに Gemini で描いた絵（案3-3・UiKit の HeaderBackdrop／HeaderAppIcon）
+        versionName = "2.3.19" // 2026-10-24: 見出しと中身の境目に1本の線（v2.3.15: 損益・騰落率の色を手直し前に戻した／v2.3.14: 見た目を表示の決まり UiKit に）
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -59,8 +59,11 @@ import com.example.panicpilot.ui.UsEvidenceScreen
 import com.example.panicpilot.ui.UsPlanScreen
 import com.example.panicpilot.ui.UsSignalScreen
 import com.example.panicpilot.ui.UsTrendScreen
+import com.example.panicpilot.ui.kit.HeaderAppIcon
+import com.example.panicpilot.ui.kit.HeaderBackdrop
 import com.example.panicpilot.ui.kit.HeaderDivider
 import com.example.panicpilot.ui.kit.ScreenHeader
+import androidx.compose.ui.res.painterResource
 import com.example.panicpilot.ui.theme.PanicPilotTheme
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -191,19 +194,28 @@ private fun AppRoot() {
             // 2026-10-23 表示の決まり UiKit: TopAppBar をやめ、背景と同じ色の見出し1段（ScreenHeader）に。
             // TopAppBar が自分でしていたステータスバーぶんの余白は statusBarsPadding で付ける。
             // 読み込み中はタイトルを書き換えず、見出しの下の細い進捗バーで示す
-            ScreenHeader(
-                // アプリ名は v2.1 で「Be Greedy」に改名（バフェットの格言
-                // "Be greedy when others are fearful" ＝他人が恐れているときこそ貪欲に）
-                title = "Be Greedy",
+            // 見出しの後ろに Gemini で描いた絵を敷く（2026-11-01 案3-3）。statusBarsPadding は入れ物の側へ移した。
+            // 下の2段のタブは UiKit の ScreenTabs でなく自前の TabRow で中身側にあるので、絵の中には入れていない
+            HeaderBackdrop(
+                art = painterResource(R.drawable.header_backdrop),
                 modifier = Modifier.statusBarsPadding(),
-                // 見出しの直下にタブの列が2段あるので、線は2段目のタブの下の1本だけにする
-                divider = false,
-                actions = {
-                    IconButton(onClick = { refresh() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "更新")
+            ) {
+                ScreenHeader(
+                    // アプリ名は v2.1 で「Be Greedy」に改名（バフェットの格言
+                    // "Be greedy when others are fearful" ＝他人が恐れているときこそ貪欲に）
+                    title = "Be Greedy",
+                    // 見出しの直下にタブの列が2段あるので、線は2段目のタブの下の1本だけにする
+                    divider = false,
+                    // 名前の左にアプリアイコン。絵の上に置くので見出し自身の背景は塗らない
+                    leading = { HeaderAppIcon(painterResource(R.mipmap.ic_launcher)) },
+                    transparent = true,
+                    actions = {
+                        IconButton(onClick = { refresh() }) {
+                            Icon(Icons.Default.Refresh, contentDescription = "更新")
+                        }
                     }
-                }
-            )
+                )
+            }
         }
     ) { pad ->
         Column(Modifier.padding(pad)) {

@@ -196,9 +196,11 @@ private fun AppRoot() {
             // 読み込み中はタイトルを書き換えず、見出しの下の細い進捗バーで示す
             // 見出しの後ろに Gemini で描いた絵を敷く（2026-11-01 案3-3）。statusBarsPadding は入れ物の側へ移した。
             // 下の2段のタブは UiKit の ScreenTabs でなく自前の TabRow で中身側にあるので、絵の中には入れていない
+            // 雄牛の絵が右上の更新・設定ボタンとかぶるので、ボタン2つぶん手前（左）へ寄せる（2026-11-01 ユーザー指示）
             HeaderBackdrop(
                 art = painterResource(R.drawable.header_backdrop),
                 modifier = Modifier.statusBarsPadding(),
+                artEndPadding = 96.dp,
             ) {
                 ScreenHeader(
                     // アプリ名は v2.1 で「Be Greedy」に改名（バフェットの格言

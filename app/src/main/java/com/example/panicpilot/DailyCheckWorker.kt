@@ -1,6 +1,7 @@
 package com.example.panicpilot
 
 import android.content.Context
+import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -55,14 +56,16 @@ class DailyCheckWorker(
             // 通信失敗はリトライ（WorkManagerのバックオフに任せる。最大3回）
             if (runAttemptCount < 3) return Result.retry()
             // リトライを使い切った＝この日の取得は失敗確定。連続失敗を記録する
-            val (streak, counted) = recordFetchFailure(ctx, reason = failReason(e))
+            // 通知は日本語の理由、端末内の記録には英語の原文も添える（run-as で原因を追えるように）
+            val reason = failReason(e)
+            val (streak, counted) = recordFetchFailure(ctx, reason = "$reason ｜原文: ${rawReason(e)}")
             // 2日連続で失敗したら警告通知（同じ日に二重通知しないよう counted でガード）
             if (counted && streak >= FAIL_NOTIFY_THRESHOLD) {
                 NotificationHelper.notify(
                     ctx, NOTIF_ID_FETCH_FAIL,
                     "⚠️ 市場データの取得に失敗しています",
                     "市場データの取得に失敗しています（${streak}日連続）。" +
-                        "データ源の障害か形式変更の可能性。理由: ${failReason(e)}" +
+                        "データ源の障害か形式変更の可能性。理由: $reason" +
                         BatteryExemption.failureHint(BatteryExemption.isExempted(ctx))
                 )
             }
@@ -251,13 +254,14 @@ class DailyCheckWorker(
             MarketFetcherUs.fetch()
         } catch (e: Exception) {
             // 失敗の可視化（日本側と同じ2日連続ルール。カウンタは別キーで独立）
-            val (streak, counted) = recordFetchFailure(ctx, US_FAIL_SUFFIX, failReason(e))
+            val reason = failReason(e)   // 通知用の日本語。記録には原文も添える
+            val (streak, counted) = recordFetchFailure(ctx, US_FAIL_SUFFIX, "$reason ｜原文: ${rawReason(e)}")
             if (counted && streak >= FAIL_NOTIFY_THRESHOLD) {
                 NotificationHelper.notify(
                     ctx, NOTIF_ID_US_FETCH_FAIL,
                     "⚠️ 米国市場データの取得に失敗しています",
                     "米国市場データの取得に失敗しています（${streak}日連続）。" +
-                        "Yahoo Financeの障害か形式変更の可能性。理由: ${failReason(e)}" +
+                        "Yahoo Financeの障害か形式変更の可能性。理由: $reason" +
                         BatteryExemption.failureHint(BatteryExemption.isExempted(ctx))
                 )
             }
@@ -387,13 +391,14 @@ class DailyCheckWorker(
         val tpx: TopixLadderStatus = try {
             TopixFetcher.fetch()
         } catch (e: Exception) {
-            val (streak, counted) = recordFetchFailure(ctx, TPX_FAIL_SUFFIX, failReason(e))
+            val reason = failReason(e)   // 通知用の日本語。記録には原文も添える
+            val (streak, counted) = recordFetchFailure(ctx, TPX_FAIL_SUFFIX, "$reason ｜原文: ${rawReason(e)}")
             if (counted && streak >= FAIL_NOTIFY_THRESHOLD) {
                 NotificationHelper.notify(
                     ctx, NOTIF_ID_TPX_FETCH_FAIL,
                     "⚠️ 1306（TOPIX）データの取得に失敗しています",
                     "1306はしご用のデータ取得に失敗しています（${streak}日連続）。" +
-                        "Yahoo Financeの障害か形式変更の可能性。理由: ${failReason(e)}" +
+                        "Yahoo Financeの障害か形式変更の可能性。理由: $reason" +
                         BatteryExemption.failureHint(BatteryExemption.isExempted(ctx))
                 )
             }
@@ -563,9 +568,62 @@ class DailyCheckWorker(
         private const val NOTIF_ID_TPX_RESET = 206                 // エピソード終了（回復）
         private const val NOTIF_ID_TPX_FETCH_FAIL = 207            // 取得失敗
 
-        /** 例外を通知・記録用の短い1行にする（長すぎると通知が読めないので200字で切る） */
-        fun failReason(e: Exception): String =
+        private const val TAG = "DailyCheckWorker"
+
+        /**
+         * 例外を通知用の日本語1行にする（2026-11-15 v2.3.20: 通知は日本語だけ＝利用者指示）。
+         * 英語の原文は通知に出さず Log.w に残す（後から adb logcat で原因を追える）
+         */
+        fun failReason(e: Exception): String {
+            Log.w(TAG, "取得失敗の原文: ${rawReason(e)}", e)
+            return failReasonJa(e)
+        }
+
+        /** 例外の原文（英語のまま）。端末内の記録（run-as で読む失敗理由）とログ用 */
+        fun rawReason(e: Throwable): String =
             "${e.javaClass.simpleName}: ${e.message ?: "-"}".take(200)
+
+        /**
+         * 例外の型名・message・cause の連鎖をまとめて見て、日本語の短い理由を返す（Log を呼ばない＝単体テスト用）。
+         * YahooChart は「3回とも失敗 [SocketTimeoutException: timeout / HTTP 429]」のように
+         * 各回の失敗を [ ] の中に英語で並べるので、型の判定だけでなく文字列全体からも分類する。
+         * 戻り値に英単語を入れない（HTTP と数字だけは可）。100字以内
+         */
+        fun failReasonJa(e: Throwable): String {
+            // cause の連鎖を全部たどる（自己参照で無限ループしないよう10段まで）
+            val chain = generateSequence(e) { t -> t.cause?.takeIf { it !== t } }.take(10).toList()
+            val text = chain.joinToString(" / ") { "${it.javaClass.simpleName}: ${it.message ?: ""}" }
+            val low = text.lowercase()
+            // HTTP の応答コード（"HTTP 429" "HTTP 404: url" "HTTP response code: 500" の3つの書き方に対応）
+            val httpCode = Regex("""HTTP\D{0,20}?([1-5]\d\d)""").find(text)?.groupValues?.get(1)
+
+            val kind = when {
+                chain.any { it is java.net.SocketTimeoutException || it is java.io.InterruptedIOException } ||
+                    "timeout" in low || "timed out" in low ->
+                    "時間切れ（相手の応答が遅い）"
+                chain.any { it is java.net.UnknownHostException } || "unknownhost" in low ->
+                    "接続できない（ネットが切れているか、住所を引けない）"
+                httpCode != null ->
+                    "相手のサーバーの応答が異常（HTTP $httpCode）"
+                chain.any { it is java.io.IOException } ||
+                    listOf("connectexception", "socketexception", "ioexception", "sslexception").any { it in low } ->
+                    "接続できない（ネットか相手のサーバーの不調）"
+                // JSONException は型名の文字列で見る（単体テストの JVM では android 側のクラスが使えないため）
+                chain.any { it is NumberFormatException } ||
+                    listOf("jsonexception", "numberformat", "parse", "format", "形式", "行数不足", "見つからない", "解析")
+                        .any { it in low } ->
+                    "データの形が想定と違う（形式が変わった可能性）"
+                else -> "想定外のエラー（詳しくはログ）"
+            }
+
+            // message の先頭が日本語の説明（例「3回とも失敗」）ならそれを前に付ける。
+            // 英字を含む先頭（例「S&P500の行数不足」）は付けない＝通知に英字を出さないため
+            val head = (e.message ?: "").substringBefore("[").substringBefore(":").trim()
+            val prefix = head.takeIf { h ->
+                h.isNotEmpty() && h.length <= 30 && h.none { it in 'A'..'Z' || it in 'a'..'z' } && h.any { it.code > 0x7F }
+            }
+            return (if (prefix != null) "$prefix：$kind" else kind).take(100)
+        }
 
         fun fmt(v: Double) = "%,.1f".format(v)
         fun fmtPct(v: Double) = "%+.1f%%".format(v * 100)
